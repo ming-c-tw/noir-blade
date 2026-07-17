@@ -275,11 +275,18 @@
         <button data-mode="page">翻頁</button>
       </div>
     </div>
+    <div class="set-row">
+      <span class="lbl">動畫</span>
+      <div class="seg" id="segAnim">
+        <button data-anim="on">開</button>
+        <button data-anim="off">關</button>
+      </div>
+    </div>
     <div style="border-top:1px solid var(--line); margin-top:6px; padding-top:8px; display:flex; justify-content:space-between; align-items:center;">
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
     </div>
-    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v2（2026.07.17）</div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v3（2026.07.17）</div>
   </div>
 </div>
 
@@ -287,7 +294,7 @@
 const $ = (s) => document.querySelector(s);
 const LS = {
   pass: 'moren_pass', last: 'moren_last', size: 'moren_size', font: 'moren_font',
-  theme: 'moren_theme', mode: 'moren_mode',
+  theme: 'moren_theme', mode: 'moren_mode', anim: 'moren_anim',
 };
 const FONTS = {
   serif: '"Noto Serif TC","Source Han Serif TC","Songti TC","STSong",serif',
@@ -302,6 +309,7 @@ let SETTINGS = [];       // [{id,title,body}] 設定文件
 let curType = 'ch';      // 目前閱讀類型：'ch' 章節 | 'set' 設定
 let curIdx = -1;         // 目前項目索引（對應 curType 的清單）
 let MODE = 'scroll';     // 閱讀模式：'scroll' 捲動 | 'page' 翻頁
+let ANIM = true;         // 翻頁是否帶滑動動畫
 let pageW = 0, pageCount = 1, curPage = 0;   // 翻頁模式狀態
 
 // ── 工具 ──
@@ -533,7 +541,7 @@ function measurePaged() {
   pageCount = Math.max(1, Math.round(total / W));
   if (curPage >= pageCount) curPage = pageCount - 1;
   if (curPage < 0) curPage = 0;
-  requestAnimationFrame(() => { inner.style.transition = 'transform .2s ease'; });
+  requestAnimationFrame(() => { inner.style.transition = ANIM ? 'transform .2s ease' : 'none'; });
 }
 function gotoPage(k, silent) {
   curPage = Math.max(0, Math.min(pageCount - 1, k));
@@ -590,6 +598,7 @@ function applyPrefs() {
   const font = localStorage.getItem(LS.font) || 'serif';
   const theme = localStorage.getItem(LS.theme) || 'dark';
   MODE = localStorage.getItem(LS.mode) || 'scroll';
+  ANIM = localStorage.getItem(LS.anim) !== 'off';   // 預設開
   document.documentElement.style.setProperty('--read-size', size + 'px');
   document.documentElement.style.setProperty('--read-font', FONTS[font]);
   document.documentElement.setAttribute('data-theme', theme);
@@ -598,7 +607,9 @@ function applyPrefs() {
   $('#segFont').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.font === font));
   $('#segTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.theme === theme));
   $('#segMode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.mode === MODE));
+  $('#segAnim').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.anim === (ANIM ? 'on' : 'off')));
   applyMode();
+  if (isPaged()) $('#pageInner').style.transition = ANIM ? 'transform .2s ease' : 'none';
 }
 
 // ── 事件綁定 ──
@@ -620,6 +631,7 @@ $('#segMode').onclick = (e) => {
   applyPrefs();
   if (wasReading) openItem(curType, curIdx, true);   // 以新模式重開，沿用進度
 };
+$('#segAnim').onclick = (e) => { if (e.target.dataset.anim) { localStorage.setItem(LS.anim, e.target.dataset.anim); applyPrefs(); } };
 // 翻頁模式：點畫面右半＝下一頁、左半＝上一頁
 $('#readerContent').addEventListener('click', (e) => {
   if (!isPaged()) return;
