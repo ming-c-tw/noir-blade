@@ -10,31 +10,51 @@ const OUT = join(dirname(fileURLToPath(import.meta.url)), 'icons');
 mkdirSync(OUT, { recursive: true });
 
 // 色票
-const GOLD = [233, 178, 46];   // 黎明黃底
-const BLK = [22, 20, 16];      // 黑刀（帶一點暖）
+const GOLD = [246, 228, 146];  // 淺黃（黎明淡光）
+const BLK = [26, 24, 20];      // 黑刀（帶一點暖）
 
 const clamp = (v) => Math.max(0, Math.min(255, Math.round(v)));
 
-// 刀的幾何（正規化座標 0..1，y 向下）
-const A = [0.30, 0.70], T = [0.72, 0.28];               // 柄端 → 刀尖
-const d = [T[0] - A[0], T[1] - A[1]];
-const dl = Math.hypot(d[0], d[1]);
-const dn = [d[0] / dl, d[1] / dl];
-const p = [-dn[1], dn[0]];                               // 垂直方向
-const at = (s, t) => [A[0] + s * d[0] + t * p[0], A[1] + s * d[1] + t * p[1]];
+// ── 武士刀幾何（沿弧形中心線；正規化座標 0..1，y 向下）──
+// 中心線＝二次貝茲：A 柄尾(左下) → T 刀尖(右上)，C 控制點給刀身弧度(sori)
+const A = [0.255, 0.755], T = [0.775, 0.225];
+const _dx = T[0] - A[0], _dy = T[1] - A[1], _dl = Math.hypot(_dx, _dy);
+const _dir = [_dx / _dl, _dy / _dl];
+const _perp = [-_dir[1], _dir[0]];                       // 中心線法向
+const _mid = [(A[0] + T[0]) / 2, (A[1] + T[1]) / 2];
+const CURVE = 0.085;                                     // 刀身彎度（sori，往刀背側鼓）
+const C = [_mid[0] - _perp[0] * CURVE, _mid[1] - _perp[1] * CURVE];
 
-// 建立各多邊形
-function bladePoly() {
-  const N = 44, pts = [];
-  for (let i = 0; i <= N; i++) { const u = i / N, s = 0.235 + u * (1 - 0.235); pts.push(at(s, +0.032 * (1 - u ** 4))); }     // 刀背（略直、近尖收）
-  for (let i = N; i >= 0; i--) { const u = i / N, s = 0.235 + u * (1 - 0.235); pts.push(at(s, -((0.045 + 0.045 * Math.sin(Math.PI * u)) * (1 - u ** 8)))); } // 刀刃（帶弧腹）
-  return pts;
+const bez = (t) => { const m = 1 - t; return [m * m * A[0] + 2 * m * t * C[0] + t * t * T[0], m * m * A[1] + 2 * m * t * C[1] + t * t * T[1]]; };
+const tangent = (t) => { const m = 1 - t; let x = 2 * m * (C[0] - A[0]) + 2 * t * (T[0] - C[0]), y = 2 * m * (C[1] - A[1]) + 2 * t * (T[1] - C[1]); const l = Math.hypot(x, y) || 1; return [x / l, y / l]; };
+const normal = (t) => { const tg = tangent(t); return [-tg[1], tg[0]]; };
+const off = (t, dd) => { const q = bez(t), n = normal(t); return [q[0] + n[0] * dd, q[1] + n[1] * dd]; };
+
+// 沿中心線在 [t0,t1] 兩側各偏移 halfW（可為函式 u→寬）建帶狀多邊形
+function band(t0, t1, halfW, steps) {
+  const top = [], bot = [];
+  for (let i = 0; i <= steps; i++) {
+    const u = i / steps, t = t0 + (t1 - t0) * u;
+    const hw = typeof halfW === 'function' ? halfW(u) : halfW;
+    top.push(off(t, hw)); bot.push(off(t, -hw));
+  }
+  return top.concat(bot.reverse());
 }
-const quad = (s0, s1, w) => [at(s0, w), at(s1, w), at(s1, -w), at(s0, -w)];
+// 護手（tsuba）：在 t 處沿法向拉長、沿切向給厚度的橫桿
+function guard(t, halfLen, halfThick) {
+  const q = bez(t), n = normal(t), tg = tangent(t);
+  const a = [q[0] + n[0] * halfLen, q[1] + n[1] * halfLen], b = [q[0] - n[0] * halfLen, q[1] - n[1] * halfLen];
+  return [
+    [a[0] + tg[0] * halfThick, a[1] + tg[1] * halfThick], [b[0] + tg[0] * halfThick, b[1] + tg[1] * halfThick],
+    [b[0] - tg[0] * halfThick, b[1] - tg[1] * halfThick], [a[0] - tg[0] * halfThick, a[1] - tg[1] * halfThick],
+  ];
+}
+
+const TG = 0.30;   // 柄與刀身分界（柄約佔 30%、刀身 70%）
 const POLYS = [
-  quad(-0.03, 0.205, 0.030),   // 刀柄
-  quad(0.205, 0.240, 0.085),   // 護手（tsuba）
-  bladePoly(),                 // 刀身
+  band(0.0, TG, 0.026, 20),                                        // 刀柄（tsuka）
+  guard(TG, 0.058, 0.013),                                         // 護手（tsuba）
+  band(TG + 0.005, 1.0, (u) => 0.024 * Math.pow(1 - u, 0.7), 70),  // 刀身：細長、往刀尖收成點
 ];
 
 function inPoly(x, y, poly) {
