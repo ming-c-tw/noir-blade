@@ -164,6 +164,29 @@
   .md th, .md td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
   .md th { background: var(--panel2); color: var(--accent); white-space: nowrap; }
 
+  /* ── 淺色主題（米黃底·鐵灰字）── */
+  :root[data-theme="light"] {
+    --bg: #f3ead6; --panel: #ece1c8; --panel2: #e4d6b8; --line: #d8c9a6;
+    --txt: #3d434a; --sub: #8a8474; --accent: #96741f; --seal: #a3352f;
+  }
+  :root[data-theme="light"] body { color-scheme: light; }
+  :root[data-theme="light"] .btn-primary { color: #fff8e7; }
+  :root[data-theme="light"] .md strong { color: #22262b; }
+  :root[data-theme="light"] .topbar { background: rgba(243,234,214,.92); }
+  :root[data-theme="light"] .reader-nav { background: rgba(243,234,214,.94); }
+  :root[data-theme="light"] #gate { background: var(--bg); }
+
+  /* ── 翻頁模式 ── */
+  #pageIndicator { display: none; }
+  #reader.paged .content { position: fixed; left: 0; right: 0; bottom: 0; overflow: hidden; padding: 6px 0; max-width: none; margin: 0; cursor: pointer; }
+  #reader.paged .pageport { margin: 0 auto; overflow: hidden; }
+  #reader.paged #pageInner { column-fill: auto; }
+  #reader.paged .reader-nav { display: none; }
+  #reader.paged #pageIndicator {
+    display: block; position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 5px);
+    text-align: center; color: var(--sub); font-size: 11px; pointer-events: none; z-index: 15;
+  }
+
   .loading { text-align: center; color: var(--sub); padding: 60px 20px; font-size: 14px; }
 </style>
 </head>
@@ -201,15 +224,20 @@
     <div class="title" id="readerTopTitle"></div>
     <button class="icon-btn" id="setBtn" aria-label="設定">Aa</button>
   </div>
-  <div class="content">
-    <div class="ch-title" id="chTitle"></div>
-    <div class="ch-vol" id="chVol"></div>
-    <div class="body" id="chBody"></div>
+  <div class="content" id="readerContent">
+    <div class="pageport" id="pagePort">
+      <div id="pageInner">
+        <div class="ch-title" id="chTitle"></div>
+        <div class="ch-vol" id="chVol"></div>
+        <div class="body" id="chBody"></div>
+      </div>
+    </div>
   </div>
   <div class="reader-nav">
     <button id="prevBtn">← 上一章</button>
     <button id="nextBtn">下一章 →</button>
   </div>
+  <div id="pageIndicator"></div>
 </div>
 
 <!-- 設定面板 -->
@@ -233,6 +261,20 @@
         <button data-font="sans">黑體</button>
       </div>
     </div>
+    <div class="set-row">
+      <span class="lbl">主題</span>
+      <div class="seg" id="segTheme">
+        <button data-theme="dark">深色</button>
+        <button data-theme="light">米黃</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <span class="lbl">翻頁</span>
+      <div class="seg" id="segMode">
+        <button data-mode="scroll">捲動</button>
+        <button data-mode="page">翻頁</button>
+      </div>
+    </div>
     <div style="border-top:1px solid var(--line); margin-top:6px; padding-top:8px; display:flex; justify-content:space-between; align-items:center;">
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
@@ -244,6 +286,7 @@
 const $ = (s) => document.querySelector(s);
 const LS = {
   pass: 'moren_pass', last: 'moren_last', size: 'moren_size', font: 'moren_font',
+  theme: 'moren_theme', mode: 'moren_mode',
 };
 const FONTS = {
   serif: '"Noto Serif TC","Source Han Serif TC","Songti TC","STSong",serif',
@@ -257,6 +300,8 @@ let FLAT = [];           // 扁平化章節，含 volId/volTitle/idx
 let SETTINGS = [];       // [{id,title,body}] 設定文件
 let curType = 'ch';      // 目前閱讀類型：'ch' 章節 | 'set' 設定
 let curIdx = -1;         // 目前項目索引（對應 curType 的清單）
+let MODE = 'scroll';     // 閱讀模式：'scroll' 捲動 | 'page' 翻頁
+let pageW = 0, pageCount = 1, curPage = 0;   // 翻頁模式狀態
 
 // ── 工具 ──
 const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -422,7 +467,9 @@ function mdToHtml(text) {
 }
 
 // ── 通用開啟（章節 / 設定）──
-function openItem(type, idx, save) {
+function isPaged() { return MODE === 'page'; }
+
+function openItem(type, idx, save, startPage) {
   const list = type === 'set' ? SETTINGS : FLAT;
   const it = list[idx];
   if (!it) return;
@@ -446,13 +493,76 @@ function openItem(type, idx, save) {
   $('#nextBtn').textContent = type === 'set' ? '下一份 →' : '下一章 →';
   show('reader');
   const last = getLast();
-  const ratio = (type === 'ch' && save && last && last.idx === idx) ? (last.ratio || 0) : 0;
-  requestAnimationFrame(() => {
-    const target = ratio * (document.documentElement.scrollHeight - window.innerHeight);
-    window.scrollTo(0, ratio ? target : 0);
-    updateProgress();
-  });
-  if (type === 'ch') setLast(idx, ratio);
+  const savedRatio = (type === 'ch' && save && last && last.idx === idx) ? (last.ratio || 0) : 0;
+  if (isPaged()) {
+    curPage = 0;
+    requestAnimationFrame(() => {
+      measurePaged();
+      let k = 0;
+      if (startPage === 'first') k = 0;
+      else if (startPage === 'last') k = pageCount - 1;
+      else if (typeof startPage === 'number') k = startPage;
+      else if (savedRatio) k = Math.round(savedRatio * (pageCount - 1));
+      gotoPage(k, false);
+    });
+  } else {
+    requestAnimationFrame(() => {
+      const target = savedRatio * (document.documentElement.scrollHeight - window.innerHeight);
+      window.scrollTo(0, savedRatio ? target : 0);
+      updateProgress();
+    });
+    if (type === 'ch') setLast(idx, savedRatio);
+  }
+}
+
+// ── 翻頁模式：量測與翻頁 ──
+function measurePaged() {
+  const content = $('#readerContent'), port = $('#pagePort'), inner = $('#pageInner');
+  const topBottom = document.querySelector('#reader .topbar').getBoundingClientRect().bottom;
+  content.style.top = topBottom + 'px';
+  const SIDE = 24;
+  const W = Math.min(window.innerWidth - SIDE * 2, 760 - SIDE * 2);
+  const H = Math.max(200, window.innerHeight - topBottom - 30);
+  port.style.width = W + 'px'; port.style.height = H + 'px';
+  inner.style.width = W + 'px'; inner.style.height = H + 'px';
+  inner.style.columnWidth = W + 'px'; inner.style.columnGap = '0px';
+  inner.style.transition = 'none'; inner.style.transform = 'translateX(0)';
+  pageW = W;
+  const total = inner.scrollWidth;                 // 讀取即強制回流，量到正確總寬
+  pageCount = Math.max(1, Math.round(total / W));
+  if (curPage >= pageCount) curPage = pageCount - 1;
+  if (curPage < 0) curPage = 0;
+  requestAnimationFrame(() => { inner.style.transition = 'transform .2s ease'; });
+}
+function gotoPage(k, silent) {
+  curPage = Math.max(0, Math.min(pageCount - 1, k));
+  $('#pageInner').style.transform = 'translateX(' + (-curPage * pageW) + 'px)';
+  $('#pageIndicator').textContent = (curPage + 1) + ' / ' + pageCount;
+  const ratio = pageCount > 1 ? curPage / (pageCount - 1) : 0;
+  $('#progressBar').style.width = (ratio * 100) + '%';
+  if (!silent && curType === 'ch') setLast(curIdx, ratio);
+}
+function nextPage() {
+  if (curPage < pageCount - 1) return gotoPage(curPage + 1);
+  const list = curType === 'set' ? SETTINGS : FLAT;
+  if (curIdx < list.length - 1) openItem(curType, curIdx + 1, false, 'first');   // 翻到下一章/份第一頁
+}
+function prevPage() {
+  if (curPage > 0) return gotoPage(curPage - 1);
+  if (curIdx > 0) openItem(curType, curIdx - 1, false, 'last');                   // 翻到上一章/份最後一頁
+}
+function clearPagedStyles() {
+  ['#readerContent', '#pagePort', '#pageInner'].forEach((s) => { const el = $(s); if (el) el.removeAttribute('style'); });
+}
+function applyMode() {
+  const reader = $('#reader');
+  if (MODE === 'page') reader.classList.add('paged');
+  else { reader.classList.remove('paged'); clearPagedStyles(); }
+}
+function repaginate() {
+  if (isPaged() && $('#reader').classList.contains('active')) {
+    requestAnimationFrame(() => { measurePaged(); gotoPage(curPage, true); });
+  }
 }
 function updateProgress() {
   const h = document.documentElement.scrollHeight - window.innerHeight;
@@ -477,10 +587,17 @@ window.addEventListener('scroll', () => {
 function applyPrefs() {
   const size = localStorage.getItem(LS.size) || '19';
   const font = localStorage.getItem(LS.font) || 'serif';
+  const theme = localStorage.getItem(LS.theme) || 'dark';
+  MODE = localStorage.getItem(LS.mode) || 'scroll';
   document.documentElement.style.setProperty('--read-size', size + 'px');
   document.documentElement.style.setProperty('--read-font', FONTS[font]);
+  document.documentElement.setAttribute('data-theme', theme);
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'light' ? '#f3ead6' : '#0f1115');
   $('#segSize').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.size === size));
   $('#segFont').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.font === font));
+  $('#segTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.theme === theme));
+  $('#segMode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.mode === MODE));
+  applyMode();
 }
 
 // ── 事件綁定 ──
@@ -492,8 +609,31 @@ $('#nextBtn').onclick = () => openItem(curType, curIdx + 1, false);
 $('#setBtn').onclick = () => $('#settings').classList.add('active');
 $('#closeSetBtn').onclick = () => $('#settings').classList.remove('active');
 $('#setMask').onclick = () => $('#settings').classList.remove('active');
-$('#segSize').onclick = (e) => { if (e.target.dataset.size) { localStorage.setItem(LS.size, e.target.dataset.size); applyPrefs(); } };
-$('#segFont').onclick = (e) => { if (e.target.dataset.font) { localStorage.setItem(LS.font, e.target.dataset.font); applyPrefs(); } };
+$('#segSize').onclick = (e) => { if (e.target.dataset.size) { localStorage.setItem(LS.size, e.target.dataset.size); applyPrefs(); repaginate(); } };
+$('#segFont').onclick = (e) => { if (e.target.dataset.font) { localStorage.setItem(LS.font, e.target.dataset.font); applyPrefs(); repaginate(); } };
+$('#segTheme').onclick = (e) => { if (e.target.dataset.theme) { localStorage.setItem(LS.theme, e.target.dataset.theme); applyPrefs(); repaginate(); } };
+$('#segMode').onclick = (e) => {
+  if (!e.target.dataset.mode) return;
+  const wasReading = $('#reader').classList.contains('active');
+  localStorage.setItem(LS.mode, e.target.dataset.mode);
+  applyPrefs();
+  if (wasReading) openItem(curType, curIdx, true);   // 以新模式重開，沿用進度
+};
+// 翻頁模式：點畫面右半＝下一頁、左半＝上一頁
+$('#readerContent').addEventListener('click', (e) => {
+  if (!isPaged()) return;
+  if (e.clientX >= window.innerWidth / 2) nextPage(); else prevPage();
+});
+// 鍵盤方向鍵／空白鍵翻頁；音量鍵嘗試監聽（多數瀏覽器/PWA 不會送達硬體音量鍵）
+document.addEventListener('keydown', (e) => {
+  if (!$('#reader').classList.contains('active') || !isPaged()) return;
+  if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); nextPage(); }
+  else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); prevPage(); }
+  else if (e.key === 'AudioVolumeDown') nextPage();
+  else if (e.key === 'AudioVolumeUp') prevPage();
+});
+let rzT;
+window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(repaginate, 200); });
 $('#forgetBtn').onclick = () => {
   localStorage.removeItem(LS.pass); KEY = null;
   $('#settings').classList.remove('active'); $('#passInput').value = '';
