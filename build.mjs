@@ -90,6 +90,25 @@ function scanVolumes() {
   return volumes;
 }
 
+// ── 掃描備選版本（書稿/_備選版本/*.md）────────────────────
+function scanAlternates() {
+  const dir = join(SRC, '_備選版本');
+  if (!existsSync(dir)) return [];
+  const files = readdirSync(dir).filter((f) => f.endsWith('.md') && !f.startsWith('.')).sort();
+  const items = [];
+  for (const f of files) {
+    const base = basename(f, '.md');
+    const m = base.match(/^(\d+)[_·\-\s]*(.*)$/);
+    const n = m ? parseInt(m[1], 10) : items.length + 1;
+    const title = (m && m[2] ? m[2] : base).replace(/_/g, ' · ');   // 「章名_版本X」→「章名 · 版本X」
+    const lines = readFileSync(join(dir, f), 'utf8').split(/\r?\n/);
+    if (lines[0] && /^#\s/.test(lines[0])) lines.shift();
+    const body = lines.join('\n').replace(/^\n+/, '').replace(/\n+$/, '');
+    items.push({ n, title, body });
+  }
+  return items;
+}
+
 // ── 掃描設定文件 ────────────────────────────────────────
 function scanSettings() {
   const docs = [];
@@ -135,6 +154,14 @@ for (const v of volumes) {
   totalChars += v.chapters.reduce((s, c) => s + c.body.length, 0);
 }
 
+// 備選版本（加密）
+const alternates = scanAlternates();
+if (alternates.length) {
+  const payload = Buffer.from(JSON.stringify({ chapters: alternates }), 'utf8');
+  writeFileSync(join(OUT, 'alternates.json'), JSON.stringify(encrypt(key, payload)));
+  index.alternates = { file: 'alternates.json', count: alternates.length };
+}
+
 // 設定文件（加密）
 const settings = scanSettings();
 if (settings.length) {
@@ -146,6 +173,7 @@ if (settings.length) {
 writeFileSync(join(OUT, 'index.json'), JSON.stringify(index));
 
 console.log(`✓ 打包完成：${volumes.length} 卷、${totalCh} 章、約 ${totalChars.toLocaleString()} 字` +
+  (alternates.length ? `、${alternates.length} 篇備選` : '') +
   (settings.length ? `、${settings.length} 份設定` : '') + ` → ${OUT}`);
 
 // ── 可選：推上 GitHub ───────────────────────────────────

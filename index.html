@@ -79,7 +79,7 @@
   #library .head .meta { color: var(--sub); font-size: 12px; margin-top: 8px; }
   .continue {
     margin: 14px 16px 6px; padding: 14px 16px; border-radius: 14px;
-    background: linear-gradient(135deg, #1d2129, #15181e); border: 1px solid var(--line);
+    background: linear-gradient(135deg, var(--panel2), var(--panel)); border: 1px solid var(--line);
     display: flex; align-items: center; gap: 12px;
   }
   .continue .c-label { font-size: 11px; color: var(--accent); letter-spacing: 1px; }
@@ -212,6 +212,7 @@
   </div>
   <div id="continueBox"></div>
   <div id="volList"></div>
+  <div id="altSection"></div>
   <div id="setSection"></div>
   <div style="height:24px"></div>
 </div>
@@ -286,7 +287,7 @@
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
     </div>
-    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v3（2026.07.17）</div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v4（2026.07.17）</div>
   </div>
 </div>
 
@@ -306,6 +307,7 @@ let INDEX = null;        // data/index.json
 let LIB = [];            // [{id,title,chapters:[{n,title,body}]}]
 let FLAT = [];           // 扁平化章節，含 volId/volTitle/idx
 let SETTINGS = [];       // [{id,title,body}] 設定文件
+let ALTERNATES = [];     // [{n,title,body}] 備選版本
 let curType = 'ch';      // 目前閱讀類型：'ch' 章節 | 'set' 設定
 let curIdx = -1;         // 目前項目索引（對應 curType 的清單）
 let MODE = 'scroll';     // 閱讀模式：'scroll' 捲動 | 'page' 翻頁
@@ -349,6 +351,13 @@ async function unlock(pass) {
   }
   FLAT = [];
   LIB.forEach((v) => v.chapters.forEach((c) => FLAT.push({ ...c, volId: v.id, volTitle: v.title, idx: FLAT.length })));
+  // 備選版本
+  ALTERNATES = [];
+  if (INDEX.alternates && INDEX.alternates.file) {
+    const res = await fetch('data/' + INDEX.alternates.file, { cache: 'no-cache' });
+    const obj = await res.json();
+    ALTERNATES = JSON.parse(await decJSON(key, obj)).chapters || [];
+  }
   // 設定文件
   SETTINGS = [];
   if (INDEX.settings && INDEX.settings.file) {
@@ -410,6 +419,20 @@ function renderLibrary() {
     vol.querySelectorAll('.ch').forEach((el) => el.onclick = () => openItem('ch', +el.dataset.idx, true));
     vl.appendChild(vol);
   });
+
+  // 備選版本
+  const as = $('#altSection'); as.innerHTML = '';
+  if (ALTERNATES.length) {
+    const vol = document.createElement('div');
+    vol.className = 'vol collapsed';
+    const items = ALTERNATES.map((d, i) =>
+      `<div class="ch" data-alt="${i}"><span class="num">✎</span><span class="t">${esc(d.title)}</span></div>`).join('');
+    vol.innerHTML = `<div class="vol-h"><span>備選版本</span><span class="count">${ALTERNATES.length} 篇</span><span class="caret">▾</span></div>
+      <div class="ch-list">${items}</div>`;
+    vol.querySelector('.vol-h').onclick = () => vol.classList.toggle('collapsed');
+    vol.querySelectorAll('.ch').forEach((el) => el.onclick = () => openItem('alt', +el.dataset.alt, false));
+    as.appendChild(vol);
+  }
 
   // 設定資料
   const ss = $('#setSection'); ss.innerHTML = '';
@@ -475,11 +498,12 @@ function mdToHtml(text) {
   return html;
 }
 
-// ── 通用開啟（章節 / 設定）──
+// ── 通用開啟（章節 / 備選 / 設定）──
 function isPaged() { return MODE === 'page'; }
+function listOf(type) { return type === 'set' ? SETTINGS : type === 'alt' ? ALTERNATES : FLAT; }
 
 function openItem(type, idx, save, startPage) {
-  const list = type === 'set' ? SETTINGS : FLAT;
+  const list = listOf(type);
   const it = list[idx];
   if (!it) return;
   curType = type; curIdx = idx;
@@ -489,6 +513,11 @@ function openItem(type, idx, save, startPage) {
     $('#chVol').textContent = it.volTitle;
     body.className = 'body';
     body.innerHTML = renderBody(it.body);
+  } else if (type === 'alt') {
+    $('#chTitle').textContent = it.title;
+    $('#chVol').textContent = '備選版本';
+    body.className = 'body';
+    body.innerHTML = it.body.trim() ? renderBody(it.body) : '<p style="color:var(--sub);text-indent:0">（這篇備選稿目前還是空的）</p>';
   } else {
     $('#chTitle').textContent = it.title;
     $('#chVol').textContent = '設定資料';
@@ -498,8 +527,8 @@ function openItem(type, idx, save, startPage) {
   $('#readerTopTitle').textContent = it.title;
   $('#prevBtn').disabled = idx <= 0;
   $('#nextBtn').disabled = idx >= list.length - 1;
-  $('#prevBtn').textContent = type === 'set' ? '← 上一份' : '← 上一章';
-  $('#nextBtn').textContent = type === 'set' ? '下一份 →' : '下一章 →';
+  const lbl = type === 'set' ? ['← 上一份', '下一份 →'] : type === 'alt' ? ['← 上一篇', '下一篇 →'] : ['← 上一章', '下一章 →'];
+  $('#prevBtn').textContent = lbl[0]; $('#nextBtn').textContent = lbl[1];
   show('reader');
   const last = getLast();
   const savedRatio = (type === 'ch' && save && last && last.idx === idx) ? (last.ratio || 0) : 0;
@@ -553,8 +582,7 @@ function gotoPage(k, silent) {
 }
 function nextPage() {
   if (curPage < pageCount - 1) return gotoPage(curPage + 1);
-  const list = curType === 'set' ? SETTINGS : FLAT;
-  if (curIdx < list.length - 1) openItem(curType, curIdx + 1, false, 'first');   // 翻到下一章/份第一頁
+  if (curIdx < listOf(curType).length - 1) openItem(curType, curIdx + 1, false, 'first');   // 翻到下一項第一頁
 }
 function prevPage() {
   if (curPage > 0) return gotoPage(curPage - 1);
