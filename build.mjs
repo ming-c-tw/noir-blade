@@ -79,11 +79,12 @@ function scanVolumes() {
       const n = cm ? parseInt(cm[1], 10) : chapters.length + 1;
       let title2 = cm && cm[2] ? cm[2] : basename(f, '.md');
       let raw = readFileSync(join(dir, f), 'utf8');
+      const mature = /<!--\s*肉\s*-->/.test(raw);   // 隱藏標記 → 標 18+
       // 去掉首行的 # 標題（避免與章名重複），保留其餘正文
       const lines = raw.split(/\r?\n/);
       if (lines[0] && /^#\s/.test(lines[0])) lines.shift();
-      const body = lines.join('\n').replace(/^\n+/, '').replace(/\n+$/, '');
-      chapters.push({ n, title: title2, body });
+      const body = lines.join('\n').replace(/<!--\s*肉\s*-->/g, '').replace(/^\n+/, '').replace(/\n+$/, '');
+      chapters.push({ n, title: title2, body, mature });
     }
     if (chapters.length) volumes.push({ id: 'vol' + volNo.replace(/\D/g, '').padStart(2, '0'), title, chapters });
   }
@@ -101,10 +102,12 @@ function scanAlternates() {
     const m = base.match(/^(\d+)[_·\-\s]*(.*)$/);
     const n = m ? parseInt(m[1], 10) : items.length + 1;
     const title = (m && m[2] ? m[2] : base).replace(/_/g, ' · ');   // 「章名_版本X」→「章名 · 版本X」
-    const lines = readFileSync(join(dir, f), 'utf8').split(/\r?\n/);
+    const raw = readFileSync(join(dir, f), 'utf8');
+    const mature = /<!--\s*肉\s*-->/.test(raw);
+    const lines = raw.split(/\r?\n/);
     if (lines[0] && /^#\s/.test(lines[0])) lines.shift();
-    const body = lines.join('\n').replace(/^\n+/, '').replace(/\n+$/, '');
-    items.push({ n, title, body });
+    const body = lines.join('\n').replace(/<!--\s*肉\s*-->/g, '').replace(/^\n+/, '').replace(/\n+$/, '');
+    items.push({ n, title, body, mature });
   }
   return items;
 }

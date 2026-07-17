@@ -127,15 +127,15 @@
   .progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent); width: 0; z-index: 20; transition: width .1s; }
 
   /* ── 設定面板 ── */
-  #settings { position: fixed; inset: 0; z-index: 30; display: none; }
-  #settings.active { display: block; }
-  #settings .mask { position: absolute; inset: 0; background: rgba(0,0,0,.5); }
-  #settings .sheet {
+  #settings, #toc { position: fixed; inset: 0; z-index: 30; display: none; }
+  #settings.active, #toc.active { display: block; }
+  #settings .mask, #toc .mask { position: absolute; inset: 0; background: rgba(0,0,0,.5); }
+  #settings .sheet, #toc .sheet {
     position: absolute; left: 0; right: 0; bottom: 0; background: var(--panel);
     border-radius: 18px 18px 0 0; padding: 20px 20px calc(env(safe-area-inset-bottom) + 24px);
     border-top: 1px solid var(--line);
   }
-  #settings h3 { margin: 0 0 16px; font-size: 15px; }
+  #settings h3, #toc h3 { margin: 0 0 16px; font-size: 15px; }
   .set-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
   .set-row .lbl { width: 64px; color: var(--sub); font-size: 13px; }
   .seg { display: flex; flex: 1; gap: 8px; }
@@ -159,10 +159,12 @@
   .md blockquote { margin: 0 0 .9em; padding: .5em .9em; border-left: 3px solid var(--accent); background: var(--panel); color: var(--sub); border-radius: 0 8px 8px 0; }
   .md blockquote p { margin: 0; }
   .md hr { border: none; border-top: 1px solid var(--line); margin: 1.4em 0; }
-  .md .tbl-wrap { overflow-x: auto; margin: 0 0 .9em; -webkit-overflow-scrolling: touch; }
-  .md table { border-collapse: collapse; width: 100%; font-size: .92em; }
-  .md th, .md td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
-  .md th { background: var(--panel2); color: var(--accent); white-space: nowrap; }
+  /* 表格改卡片式（每列一張卡，欄名當標籤）——手機好讀 */
+  .md .tbl-cards { margin: 0 0 1em; }
+  .md .trow { border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; margin: 0 0 10px; background: var(--panel); }
+  .md .trow-h { font-weight: 700; color: var(--accent); margin-bottom: 6px; font-size: 1.02em; }
+  .md .tcell { margin: 5px 0; line-height: 1.7; }
+  .md .tcell .tk { color: var(--sub); font-size: .86em; margin-right: 5px; }
 
   /* ── 淺色主題（米黃底·鐵灰字）── */
   :root[data-theme="light"] {
@@ -186,6 +188,15 @@
     display: block; position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 5px);
     text-align: center; color: var(--sub); font-size: 11px; pointer-events: none; z-index: 15;
   }
+
+  /* 18+ 標籤 */
+  .tag18 { display: inline-block; background: var(--seal); color: #fff; font-size: 10px; line-height: 1.5; padding: 0 5px; border-radius: 5px; margin-left: 6px; font-weight: 700; letter-spacing: .5px; vertical-align: middle; }
+
+  /* 段落選閱（目錄）清單 */
+  #tocList { max-height: 62vh; overflow-y: auto; margin: 0 -4px; }
+  .toc-item { padding: 11px 8px; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--txt); }
+  .toc-item.lv3 { padding-left: 24px; color: var(--sub); font-size: 13px; }
+  .toc-item:active { background: var(--panel2); }
 
   .loading { text-align: center; color: var(--sub); padding: 60px 20px; font-size: 14px; }
 </style>
@@ -222,6 +233,7 @@
   <div class="progress" id="progressBar"></div>
   <div class="topbar">
     <button class="icon-btn" id="backBtn" aria-label="回目錄">☰</button>
+    <button class="icon-btn wide" id="tocBtn" style="display:none">目錄</button>
     <div class="title" id="readerTopTitle"></div>
     <button class="icon-btn" id="setBtn" aria-label="設定">Aa</button>
   </div>
@@ -287,7 +299,16 @@
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
     </div>
-    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v4（2026.07.17）</div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v5（2026.07.18）</div>
+  </div>
+</div>
+
+<!-- 段落選閱（設定文件目錄）-->
+<div id="toc">
+  <div class="mask" id="tocMask"></div>
+  <div class="sheet">
+    <h3>段落選閱</h3>
+    <div id="tocList"></div>
   </div>
 </div>
 
@@ -313,6 +334,7 @@ let curIdx = -1;         // 目前項目索引（對應 curType 的清單）
 let MODE = 'scroll';     // 閱讀模式：'scroll' 捲動 | 'page' 翻頁
 let ANIM = true;         // 翻頁是否帶滑動動畫
 let pageW = 0, pageCount = 1, curPage = 0;   // 翻頁模式狀態
+let curSections = [];    // 目前設定文件的段落（供段落選閱）
 
 // ── 工具 ──
 const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -410,8 +432,9 @@ function renderLibrary() {
     const chs = v.chapters.map((c) => {
       const fi = FLAT.find((f) => f.volId === v.id && f.n === c.n);
       const isReading = last && fi && fi.idx === last.idx;
+      const tag = c.mature ? ' <span class="tag18">18+</span>' : '';
       return `<div class="ch${isReading ? ' reading' : ''}" data-idx="${fi.idx}">
-        <span class="num">${String(c.n).padStart(3, '0')}</span><span class="t">${esc(c.title)}</span></div>`;
+        <span class="num">${String(c.n).padStart(3, '0')}</span><span class="t">${esc(c.title)}${tag}</span></div>`;
     }).join('');
     vol.innerHTML = `<div class="vol-h"><span>${esc(v.title)}</span><span class="count">${v.chapters.length} 章</span><span class="caret">▾</span></div>
       <div class="ch-list">${chs}</div>`;
@@ -426,7 +449,7 @@ function renderLibrary() {
     const vol = document.createElement('div');
     vol.className = 'vol collapsed';
     const items = ALTERNATES.map((d, i) =>
-      `<div class="ch" data-alt="${i}"><span class="num">✎</span><span class="t">${esc(d.title)}</span></div>`).join('');
+      `<div class="ch" data-alt="${i}"><span class="num">✎</span><span class="t">${esc(d.title)}${d.mature ? ' <span class="tag18">18+</span>' : ''}</span></div>`).join('');
     vol.innerHTML = `<div class="vol-h"><span>備選版本</span><span class="count">${ALTERNATES.length} 篇</span><span class="caret">▾</span></div>
       <div class="ch-list">${items}</div>`;
     vol.querySelector('.vol-h').onclick = () => vol.classList.toggle('collapsed');
@@ -480,9 +503,21 @@ function mdToHtml(text) {
       const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
       const head = cells(t);
       i += 2;
-      let rows = '';
-      while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) { rows += '<tr>' + cells(lines[i]).map((c) => `<td>${inlineMd(c)}</td>`).join('') + '</tr>'; i++; }
-      html += `<div class="tbl-wrap"><table><thead><tr>${head.map((c) => `<th>${inlineMd(c)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table></div>`;
+      let cards = '<div class="tbl-cards">';
+      while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
+        const row = cells(lines[i]); i++;
+        cards += '<div class="trow">';
+        cards += `<div class="trow-h">${inlineMd(row[0] || '')}</div>`;          // 首欄當卡片標題
+        for (let ci = 1; ci < head.length; ci++) {
+          const v = row[ci] || '';
+          if (!v) continue;
+          const k = head[ci] ? `<span class="tk">${inlineMd(head[ci])}：</span>` : '';
+          cards += `<div class="tcell">${k}${inlineMd(v)}</div>`;
+        }
+        cards += '</div>';
+      }
+      cards += '</div>';
+      html += cards;
       continue;
     }
     if (!t) { closeList(); i++; continue; }
@@ -524,11 +559,14 @@ function openItem(type, idx, save, startPage) {
     body.className = 'md';
     body.innerHTML = mdToHtml(it.body);
   }
+  if (it.mature) $('#chVol').innerHTML += ' <span class="tag18">18+</span>';
   $('#readerTopTitle').textContent = it.title;
   $('#prevBtn').disabled = idx <= 0;
   $('#nextBtn').disabled = idx >= list.length - 1;
   const lbl = type === 'set' ? ['← 上一份', '下一份 →'] : type === 'alt' ? ['← 上一篇', '下一篇 →'] : ['← 上一章', '下一章 →'];
   $('#prevBtn').textContent = lbl[0]; $('#nextBtn').textContent = lbl[1];
+  if (type === 'set') { buildToc(); $('#tocBtn').style.display = curSections.length ? '' : 'none'; }
+  else { curSections = []; $('#tocBtn').style.display = 'none'; }
   show('reader');
   const last = getLast();
   const savedRatio = (type === 'ch' && save && last && last.idx === idx) ? (last.ratio || 0) : 0;
@@ -601,6 +639,38 @@ function repaginate() {
     requestAnimationFrame(() => { measurePaged(); gotoPage(curPage, true); });
   }
 }
+
+// ── 段落選閱（設定文件目錄）──
+function buildToc() {
+  const hs = [...$('#chBody').querySelectorAll('h2, h3')];
+  curSections = hs.map((el, i) => { el.dataset.sec = i; return { i, text: el.textContent, level: +el.tagName[1] }; });
+}
+function openToc() {
+  const list = $('#tocList'); list.innerHTML = '';
+  curSections.forEach((s) => {
+    const d = document.createElement('div');
+    d.className = 'toc-item lv' + s.level;
+    d.textContent = s.text;
+    d.onclick = () => { $('#toc').classList.remove('active'); jumpToSection(s.i); };
+    list.appendChild(d);
+  });
+  $('#toc').classList.add('active');
+}
+// 找出某元素在翻頁模式下位於第幾頁
+function pageOfElement(el) {
+  const inner = $('#pageInner');
+  const prevT = inner.style.transition, prevX = inner.style.transform;
+  inner.style.transition = 'none'; inner.style.transform = 'translateX(0)';
+  const x = el.getBoundingClientRect().left - inner.getBoundingClientRect().left;
+  inner.style.transform = prevX; inner.style.transition = prevT;
+  return Math.round(x / pageW);
+}
+function jumpToSection(i) {
+  const el = $('#chBody').querySelector('[data-sec="' + i + '"]');
+  if (!el) return;
+  if (isPaged()) { measurePaged(); gotoPage(pageOfElement(el), false); }
+  else { window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 72, behavior: 'smooth' }); }
+}
 function updateProgress() {
   const h = document.documentElement.scrollHeight - window.innerHeight;
   const r = h > 0 ? Math.min(1, window.scrollY / h) : 0;
@@ -644,6 +714,8 @@ function applyPrefs() {
 $('#unlockBtn').onclick = () => { const p = $('#passInput').value.trim(); if (p) doUnlock(p, $('#rememberChk').checked); };
 $('#passInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#unlockBtn').click(); });
 $('#backBtn').onclick = () => { renderLibrary(); show('library'); };
+$('#tocBtn').onclick = () => openToc();
+$('#tocMask').onclick = () => $('#toc').classList.remove('active');
 $('#prevBtn').onclick = () => openItem(curType, curIdx - 1, false);
 $('#nextBtn').onclick = () => openItem(curType, curIdx + 1, false);
 $('#setBtn').onclick = () => $('#settings').classList.add('active');
