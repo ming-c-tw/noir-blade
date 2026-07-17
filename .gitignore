@@ -1,0 +1,6 @@
+# 密碼檔：絕不上傳（App 的解密密碼只存在本機）
+.passphrase
+
+# 系統雜項
+.DS_Store
+node_modules/

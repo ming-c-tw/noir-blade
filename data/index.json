@@ -1,0 +1,1 @@
+{"v":1,"updated":"2026-07-17T08:38:38.252Z","kdf":{"salt":"3RzV0lqNFxet8THvbSOe2A==","iter":200000,"hash":"SHA-256"},"check":{"iv":"56hEkjzEF+DV1EnB","ct":"NzuPtU3RiImu8NWtUv19bHL8eb2hn7yO"},"volumes":[{"id":"vol01","file":"vol01.json","chapters":6}],"settings":{"file":"settings.json","count":5}}
