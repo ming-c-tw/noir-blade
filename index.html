@@ -198,6 +198,22 @@
   .toc-item.lv3 { padding-left: 24px; color: var(--sub); font-size: 13px; }
   .toc-item:active { background: var(--panel2); }
 
+  /* 左拉式章節抽屜 */
+  #drawer { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+  #drawer.active { pointer-events: auto; }
+  #drawer .mask { position: absolute; inset: 0; background: rgba(0,0,0,.5); opacity: 0; transition: opacity .22s; }
+  #drawer.active .mask { opacity: 1; }
+  .drawer-panel {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 84%; max-width: 340px;
+    background: var(--bg); border-right: 1px solid var(--line); overflow-y: auto;
+    padding: calc(env(safe-area-inset-top) + 12px) 8px calc(env(safe-area-inset-bottom) + 20px);
+    transform: translateX(-100%); transition: transform .22s ease;
+  }
+  #drawer.active .drawer-panel { transform: translateX(0); }
+  .drawer-head { display: flex; align-items: center; gap: 8px; padding: 4px 8px 12px; }
+  .drawer-head .dh-title { flex: 1; font-size: 20px; font-weight: 800; color: var(--accent); letter-spacing: 4px; }
+  .drawer-panel .vol { margin: 8px 4px; }
+
   .loading { text-align: center; color: var(--sub); padding: 60px 20px; font-size: 14px; }
 </style>
 </head>
@@ -222,9 +238,7 @@
     <div class="meta" id="libMeta"></div>
   </div>
   <div id="continueBox"></div>
-  <div id="volList"></div>
-  <div id="altSection"></div>
-  <div id="setSection"></div>
+  <div id="libNav"></div>
   <div style="height:24px"></div>
 </div>
 
@@ -232,7 +246,7 @@
 <div id="reader" class="screen">
   <div class="progress" id="progressBar"></div>
   <div class="topbar">
-    <button class="icon-btn" id="backBtn" aria-label="回目錄">☰</button>
+    <button class="icon-btn" id="backBtn" aria-label="章節選單">☰</button>
     <button class="icon-btn wide" id="tocBtn" style="display:none">目錄</button>
     <div class="title" id="readerTopTitle"></div>
     <button class="icon-btn" id="setBtn" aria-label="設定">Aa</button>
@@ -299,7 +313,7 @@
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
     </div>
-    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v5（2026.07.18）</div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v6（2026.07.18）</div>
   </div>
 </div>
 
@@ -309,6 +323,18 @@
   <div class="sheet">
     <h3>段落選閱</h3>
     <div id="tocList"></div>
+  </div>
+</div>
+
+<!-- 左拉式章節抽屜 -->
+<div id="drawer">
+  <div class="mask" id="drawerMask"></div>
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <span class="dh-title">墨刃</span>
+      <button class="icon-btn wide" id="drawerHome">書架</button>
+    </div>
+    <div id="drawerNav"></div>
   </div>
 </div>
 
@@ -335,6 +361,8 @@ let MODE = 'scroll';     // 閱讀模式：'scroll' 捲動 | 'page' 翻頁
 let ANIM = true;         // 翻頁是否帶滑動動畫
 let pageW = 0, pageCount = 1, curPage = 0;   // 翻頁模式狀態
 let curSections = [];    // 目前設定文件的段落（供段落選閱）
+let collapseState = {};   // 各區塊收合狀態（跨畫面保留），key: 'vol:xxx' | 'alt' | 'set'
+let collapseInit = false;
 
 // ── 工具 ──
 const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -407,13 +435,56 @@ async function doUnlock(pass, remember) {
   }
 }
 
-// ── 目錄 ──
+// ── 目錄／導覽 ──
+// 只在第一次設定收合預設（展開最後一卷、其餘收合）；之後一律沿用使用者當下的收合狀態
+function ensureCollapseDefaults() {
+  if (collapseInit) return;
+  LIB.forEach((v, i) => { if (collapseState['vol:' + v.id] === undefined) collapseState['vol:' + v.id] = i < LIB.length - 1; });
+  if (collapseState.alt === undefined) collapseState.alt = true;
+  if (collapseState.set === undefined) collapseState.set = true;
+  collapseInit = true;
+}
+
+// 建一個可收合區塊（卷／備選／設定共用）；收合狀態存 collapseState[key]，跨畫面／回書架都保留
+function makeBlock(key, title, countText, items, activeKey) {
+  const vol = document.createElement('div');
+  if (collapseState[key] === undefined) collapseState[key] = true;
+  vol.className = 'vol' + (collapseState[key] ? ' collapsed' : '');
+  const chs = items.map((it) =>
+    `<div class="ch${it.key === activeKey ? ' reading' : ''}" data-key="${it.key}">
+       <span class="num">${it.num}</span><span class="t">${esc(it.title)}${it.mature ? ' <span class="tag18">18+</span>' : ''}</span></div>`).join('');
+  vol.innerHTML = `<div class="vol-h"><span>${esc(title)}</span><span class="count">${countText}</span><span class="caret">▾</span></div>
+    <div class="ch-list">${chs}</div>`;
+  vol.querySelector('.vol-h').onclick = () => { collapseState[key] = !collapseState[key]; vol.classList.toggle('collapsed'); };
+  vol.querySelectorAll('.ch').forEach((el) => { const it = items.find((x) => x.key === el.dataset.key); el.onclick = it.onClick; });
+  return vol;
+}
+
+// 把「卷→章 / 備選 / 設定」建進 container；onPick(type, idx) 為點選時行為（書架與抽屜共用）
+function renderNav(container, opts) {
+  opts = opts || {};
+  ensureCollapseDefaults();
+  container.innerHTML = '';
+  LIB.forEach((v) => {
+    const items = v.chapters.map((c) => {
+      const fi = FLAT.find((f) => f.volId === v.id && f.n === c.n);
+      return { key: 'ch:' + fi.idx, num: String(c.n).padStart(3, '0'), title: c.title, mature: c.mature, onClick: () => opts.onPick('ch', fi.idx) };
+    });
+    container.appendChild(makeBlock('vol:' + v.id, v.title, v.chapters.length + ' 章', items, opts.activeKey));
+  });
+  if (ALTERNATES.length) {
+    const items = ALTERNATES.map((d, i) => ({ key: 'alt:' + i, num: '✎', title: d.title, mature: d.mature, onClick: () => opts.onPick('alt', i) }));
+    container.appendChild(makeBlock('alt', '備選版本', ALTERNATES.length + ' 篇', items, opts.activeKey));
+  }
+  if (SETTINGS.length) {
+    const items = SETTINGS.map((d, i) => ({ key: 'set:' + i, num: '◆', title: d.title, onClick: () => opts.onPick('set', i) }));
+    container.appendChild(makeBlock('set', '設定資料', SETTINGS.length + ' 份', items, opts.activeKey));
+  }
+}
+
 function renderLibrary() {
   const d = INDEX.updated ? new Date(INDEX.updated) : null;
-  const total = FLAT.length;
-  $('#libMeta').textContent = `共 ${LIB.length} 卷 · ${total} 章` + (d ? ` · 更新於 ${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` : '');
-
-  // 繼續閱讀
+  $('#libMeta').textContent = `共 ${LIB.length} 卷 · ${FLAT.length} 章` + (d ? ` · 更新於 ${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` : '');
   const last = getLast();
   const box = $('#continueBox');
   if (last && FLAT[last.idx]) {
@@ -423,54 +494,18 @@ function renderLibrary() {
       <div class="c-go">›</div></div>`;
     $('#continueBtn').onclick = () => openItem('ch', last.idx, true);
   } else box.innerHTML = '';
-
-  // 卷 / 章
-  const vl = $('#volList'); vl.innerHTML = '';
-  LIB.forEach((v, vi) => {
-    const vol = document.createElement('div');
-    vol.className = 'vol' + (vi < LIB.length - 1 ? ' collapsed' : '');   // 預設展開最後一卷
-    const chs = v.chapters.map((c) => {
-      const fi = FLAT.find((f) => f.volId === v.id && f.n === c.n);
-      const isReading = last && fi && fi.idx === last.idx;
-      const tag = c.mature ? ' <span class="tag18">18+</span>' : '';
-      return `<div class="ch${isReading ? ' reading' : ''}" data-idx="${fi.idx}">
-        <span class="num">${String(c.n).padStart(3, '0')}</span><span class="t">${esc(c.title)}${tag}</span></div>`;
-    }).join('');
-    vol.innerHTML = `<div class="vol-h"><span>${esc(v.title)}</span><span class="count">${v.chapters.length} 章</span><span class="caret">▾</span></div>
-      <div class="ch-list">${chs}</div>`;
-    vol.querySelector('.vol-h').onclick = () => vol.classList.toggle('collapsed');
-    vol.querySelectorAll('.ch').forEach((el) => el.onclick = () => openItem('ch', +el.dataset.idx, true));
-    vl.appendChild(vol);
-  });
-
-  // 備選版本
-  const as = $('#altSection'); as.innerHTML = '';
-  if (ALTERNATES.length) {
-    const vol = document.createElement('div');
-    vol.className = 'vol collapsed';
-    const items = ALTERNATES.map((d, i) =>
-      `<div class="ch" data-alt="${i}"><span class="num">✎</span><span class="t">${esc(d.title)}${d.mature ? ' <span class="tag18">18+</span>' : ''}</span></div>`).join('');
-    vol.innerHTML = `<div class="vol-h"><span>備選版本</span><span class="count">${ALTERNATES.length} 篇</span><span class="caret">▾</span></div>
-      <div class="ch-list">${items}</div>`;
-    vol.querySelector('.vol-h').onclick = () => vol.classList.toggle('collapsed');
-    vol.querySelectorAll('.ch').forEach((el) => el.onclick = () => openItem('alt', +el.dataset.alt, false));
-    as.appendChild(vol);
-  }
-
-  // 設定資料
-  const ss = $('#setSection'); ss.innerHTML = '';
-  if (SETTINGS.length) {
-    const vol = document.createElement('div');
-    vol.className = 'vol collapsed';
-    const items = SETTINGS.map((d, i) =>
-      `<div class="ch" data-set="${i}"><span class="num">◆</span><span class="t">${esc(d.title)}</span></div>`).join('');
-    vol.innerHTML = `<div class="vol-h"><span>設定資料</span><span class="count">${SETTINGS.length} 份</span><span class="caret">▾</span></div>
-      <div class="ch-list">${items}</div>`;
-    vol.querySelector('.vol-h').onclick = () => vol.classList.toggle('collapsed');
-    vol.querySelectorAll('.ch').forEach((el) => el.onclick = () => openItem('set', +el.dataset.set, false));
-    ss.appendChild(vol);
-  }
+  renderNav($('#libNav'), { activeKey: last ? 'ch:' + last.idx : null, onPick: (t, i) => openItem(t, i, true) });
 }
+
+// ── 左拉式章節抽屜（閱讀中快速切章，不必回書架）──
+function openDrawer() {
+  renderNav($('#drawerNav'), {
+    activeKey: (curType && curIdx >= 0) ? curType + ':' + curIdx : null,
+    onPick: (t, i) => { closeDrawer(); openItem(t, i, true); },
+  });
+  $('#drawer').classList.add('active');
+}
+function closeDrawer() { $('#drawer').classList.remove('active'); }
 
 // ── 章節正文（散文）渲染 ──
 function renderBody(text) {
@@ -713,7 +748,9 @@ function applyPrefs() {
 // ── 事件綁定 ──
 $('#unlockBtn').onclick = () => { const p = $('#passInput').value.trim(); if (p) doUnlock(p, $('#rememberChk').checked); };
 $('#passInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#unlockBtn').click(); });
-$('#backBtn').onclick = () => { renderLibrary(); show('library'); };
+$('#backBtn').onclick = () => openDrawer();
+$('#drawerMask').onclick = () => closeDrawer();
+$('#drawerHome').onclick = () => { closeDrawer(); renderLibrary(); show('library'); };
 $('#tocBtn').onclick = () => openToc();
 $('#tocMask').onclick = () => $('#toc').classList.remove('active');
 $('#prevBtn').onclick = () => openItem(curType, curIdx - 1, false);
