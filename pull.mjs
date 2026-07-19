@@ -98,16 +98,30 @@ function sanitize(name) {
 }
 
 // ── 主流程 ──────────────────────────────────────────────
+// changedData：這次 git pull 實際帶進來的 data 檔（basename 集合）。
+// 只回寫「遠端 commit 真的動過」的檔 → 避免把本地未推的編輯，用線上舊版蓋掉（曾踩過雷）。
+// null = 不設限（--dry 純稽核模式：比對全部、但不寫檔）。
+let changedData = null;
 if (!DRY) {
+  const git = (args) => execSync('git ' + args, { cwd: __dirname, stdio: 'pipe' }).toString().trim();
+  let headBefore = '';
+  try { headBefore = git('rev-parse HEAD'); } catch {}
+  console.log('· git pull …');
   try {
-    console.log('· git pull …');
-    const out = execSync('git pull --ff-only', { cwd: __dirname, stdio: 'pipe' }).toString().trim();
-    console.log('  ' + out.replace(/\n/g, '\n  '));
+    console.log('  ' + git('pull --ff-only').replace(/\n/g, '\n  '));
   } catch (e) {
     console.error('✗ git pull 失敗（可能有本地未提交變更或衝突，請先處理）:\n' + (e.stderr?.toString() || e.message));
     process.exit(1);
   }
+  const headAfter = git('rev-parse HEAD');
+  if (headBefore === headAfter) {
+    changedData = new Set();   // 沒有新的遠端 commit → 沒有手機編輯要拉，不動任何本地檔
+  } else {
+    changedData = new Set(git(`diff --name-only ${headBefore} ${headAfter} -- data/`).split('\n').filter(Boolean).map((p) => p.split('/').pop()));
+  }
 }
+// 這個 data 檔是否該回寫本地：--dry 全查；正式模式只認「這次 pull 動過的檔」
+const eligible = (file) => changedData === null || changedData.has(file);
 
 const pass = readPass();
 const idx = JSON.parse(readFileSync(join(DATA, 'index.json'), 'utf8'));
@@ -123,6 +137,7 @@ const report = [];
 
 // 卷 → 章
 for (const v of idx.volumes) {
+  if (!eligible(v.file)) continue;   // 這次 pull 沒動到這個卷檔 → 跳過，別覆蓋本地
   let vol;
   try { vol = JSON.parse(decrypt(key, JSON.parse(readFileSync(join(DATA, v.file), 'utf8')))); }
   catch (e) { console.error(`✗ 解密 ${v.file} 失敗（密碼不符？）`); process.exit(1); }
@@ -151,7 +166,7 @@ for (const v of idx.volumes) {
 }
 
 // 設定文件
-if (idx.settings && idx.settings.file) {
+if (idx.settings && idx.settings.file && eligible(idx.settings.file)) {
   const docs = (JSON.parse(decrypt(key, JSON.parse(readFileSync(join(DATA, idx.settings.file), 'utf8')))).docs) || [];
   for (const doc of docs) {
     checked++;
@@ -167,7 +182,7 @@ if (idx.settings && idx.settings.file) {
 }
 
 // 備選版本
-if (idx.alternates && idx.alternates.file) {
+if (idx.alternates && idx.alternates.file && eligible(idx.alternates.file)) {
   const alts = (JSON.parse(decrypt(key, JSON.parse(readFileSync(join(DATA, idx.alternates.file), 'utf8')))).chapters) || [];
   const altDir = join(SRC, '_備選版本');
   for (const a of alts) {
