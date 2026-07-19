@@ -135,6 +135,31 @@ const pass = readPassphrase();
 const salt = createHash('sha256').update('moren-fixed-salt::v1::' + pass).digest().subarray(0, 16);
 const key = deriveKey(pass, salt);
 
+// ── 防呆：若線上版本比本地新，代表你在手機 App 上改過內容還沒同步回本地，先擋下 ──
+// （避免用舊的本地書稿，把手機剛編輯的內容蓋掉。用 --force 可強制略過。）
+async function checkRemoteNewer() {
+  if (process.argv.includes('--force')) return;
+  const localIdxPath = join(OUT, 'index.json');
+  if (!existsSync(localIdxPath)) return;                     // 首次打包，無可比對
+  let localUpdated;
+  try { localUpdated = JSON.parse(readFileSync(localIdxPath, 'utf8')).updated; } catch { return; }
+  if (!localUpdated) return;
+  let remote;
+  try {
+    const res = await fetch('https://ming-c-tw.github.io/noir-blade/data/index.json?cb=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    remote = await res.json();
+  } catch { return; }                                        // 離線／抓不到 → 不擋，照常打包
+  if (remote.updated && remote.updated > localUpdated) {
+    console.error('✗ 線上版本比本地新（線上 ' + remote.updated + ' > 本地 ' + localUpdated + '）。');
+    console.error('  很可能你在手機 App 上改過內容、還沒同步回本地。');
+    console.error('  請先雙擊「更新.command」（或執行 node pull.mjs）把手機的修改拉回本地，再重新打包。');
+    console.error('  若確定要用本地覆蓋線上，請改用：node build.mjs --push --force');
+    process.exit(1);
+  }
+}
+await checkRemoteNewer();
+
 const volumes = scanVolumes();
 if (!volumes.length) { console.error('✗ 沒掃到任何章節，請確認書稿路徑。'); process.exit(1); }
 

@@ -215,6 +215,24 @@
   .drawer-panel .vol { margin: 8px 4px; }
 
   .loading { text-align: center; color: var(--sub); padding: 60px 20px; font-size: 14px; }
+
+  /* ── 編輯模式 ── */
+  #editor { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; background: var(--bg); }
+  #editor.active { display: flex; }
+  #editor .ed-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  #editor .ed-title { flex: 1; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--accent); }
+  #editor .ed-save { background: var(--accent); color: #1a1206; border-color: var(--accent); font-weight: 700; }
+  #editor .ed-save:disabled { opacity: .5; }
+  :root[data-theme="light"] #editor .ed-save { color: #fff8e7; }
+  #editArea {
+    flex: 1; width: 100%; border: none; outline: none; resize: none; background: var(--bg); color: var(--txt);
+    font-family: var(--read-font); font-size: 17px; line-height: 1.9;
+    padding: 16px 18px calc(env(safe-area-inset-bottom) + 16px);
+  }
+  #editStatus { padding: 8px 16px calc(env(safe-area-inset-bottom) + 8px); font-size: 12px; color: var(--seal); min-height: 16px; background: var(--panel); }
 </style>
 </head>
 <body>
@@ -249,6 +267,7 @@
     <button class="icon-btn" id="backBtn" aria-label="章節選單">☰</button>
     <button class="icon-btn wide" id="tocBtn" style="display:none">目錄</button>
     <div class="title" id="readerTopTitle"></div>
+    <button class="icon-btn" id="editBtn" aria-label="編輯">✎</button>
     <button class="icon-btn" id="setBtn" aria-label="設定">Aa</button>
   </div>
   <div class="content" id="readerContent">
@@ -309,11 +328,21 @@
         <button data-anim="off">關</button>
       </div>
     </div>
+    <div class="set-row" style="flex-direction:column; align-items:stretch; gap:8px; border-top:1px solid var(--line); margin-top:6px; padding-top:14px;">
+      <span class="lbl" style="width:auto;">GitHub PAT（手機編輯回寫用）</span>
+      <input id="patInput" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="貼上 fine-grained PAT（只授權 noir-blade）"
+        style="width:100%; padding:11px 12px; font-size:13px; background:var(--panel2); border:1px solid var(--line); border-radius:10px; color:var(--txt); outline:none;">
+      <div style="display:flex; gap:8px;">
+        <button class="icon-btn wide" id="patSave" style="flex:1;">儲存</button>
+        <button class="icon-btn wide" id="patClear" style="flex:1;">清除</button>
+      </div>
+      <div id="patStatus" style="font-size:11px; color:var(--sub);"></div>
+    </div>
     <div style="border-top:1px solid var(--line); margin-top:6px; padding-top:8px; display:flex; justify-content:space-between; align-items:center;">
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
     </div>
-    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v6（2026.07.18）</div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v7（2026.07.19 · 編輯）</div>
   </div>
 </div>
 
@@ -338,12 +367,25 @@
   </div>
 </div>
 
+<!-- 編輯模式 -->
+<div id="editor">
+  <div class="ed-bar">
+    <button class="icon-btn wide" id="editCancel">取消</button>
+    <div class="ed-title" id="editTitle"></div>
+    <button class="icon-btn wide ed-save" id="editSave">儲存並推送</button>
+  </div>
+  <textarea id="editArea" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+  <div id="editStatus"></div>
+</div>
+
 <script>
 const $ = (s) => document.querySelector(s);
 const LS = {
   pass: 'moren_pass', last: 'moren_last', size: 'moren_size', font: 'moren_font',
-  theme: 'moren_theme', mode: 'moren_mode', anim: 'moren_anim',
+  theme: 'moren_theme', mode: 'moren_mode', anim: 'moren_anim', ghpat: 'moren_ghpat',
 };
+// GitHub 回寫目標（手機編輯 → commit 到這個 repo）
+const REPO = { owner: 'ming-c-tw', repo: 'noir-blade', branch: 'main' };
 const FONTS = {
   serif: '"Noto Serif TC","Source Han Serif TC","Songti TC","STSong",serif',
   sans: '-apple-system,"PingFang TC","Noto Sans TC","Helvetica Neue",sans-serif',
@@ -373,12 +415,125 @@ async function deriveKey(pass, kdf) {
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
     { name: 'PBKDF2', salt: b64ToBuf(kdf.salt), iterations: kdf.iter, hash: kdf.hash },
-    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']
+    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt', 'encrypt']
   );
 }
 async function decJSON(key, obj) {
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBuf(obj.iv) }, key, b64ToBuf(obj.ct));
   return new TextDecoder().decode(pt);
+}
+
+// ── 加密（對稱於 decJSON；手機編輯後把該檔重新打包，與 build.mjs 格式一致）──
+function bufToB64(buf) {
+  const bytes = new Uint8Array(buf); let bin = '';
+  const CH = 0x8000;   // 分段避免 fromCharCode 參數過多爆堆疊
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
+async function encJSON(key, str) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(str));
+  return { iv: bufToB64(iv), ct: bufToB64(ct) };   // ct 尾端自帶 16-byte tag，與 build.mjs / pull.mjs 對應
+}
+
+// ── GitHub 寫回（fine-grained PAT；原子 commit：blobs → tree → commit → 更新 ref）──
+function ghToken() { return localStorage.getItem(LS.ghpat) || ''; }
+async function gh(path, opts = {}) {
+  const res = await fetch('https://api.github.com/repos/' + REPO.owner + '/' + REPO.repo + path, {
+    method: opts.method || 'GET',
+    headers: { Authorization: 'Bearer ' + ghToken(), Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: opts.body,
+  });
+  if (!res.ok) throw new Error('GitHub ' + res.status + '：' + (await res.text()).slice(0, 160));
+  return res.json();
+}
+async function ghCommit(files, message) {
+  const ref = await gh('/git/ref/heads/' + REPO.branch);
+  const baseSha = ref.object.sha;
+  const baseCommit = await gh('/git/commits/' + baseSha);
+  const treeItems = [];
+  for (const f of files) {
+    const blob = await gh('/git/blobs', { method: 'POST', body: JSON.stringify({ content: f.content, encoding: 'utf-8' }) });
+    treeItems.push({ path: f.path, mode: '100644', type: 'blob', sha: blob.sha });
+  }
+  const tree = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: baseCommit.tree.sha, tree: treeItems }) });
+  const commit = await gh('/git/commits', { method: 'POST', body: JSON.stringify({ message, tree: tree.sha, parents: [baseSha] }) });
+  await gh('/git/refs/heads/' + REPO.branch, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
+  return commit.sha;
+}
+
+// ── 編輯模式 ──
+let editOrig = '';
+// 依目前閱讀類型，回傳「怎麼讀/寫這段 body、以及儲存時要重打包哪個檔」
+function currentEditable() {
+  if (curType === 'ch') {
+    const it = FLAT[curIdx];
+    const vol = LIB.find((v) => v.id === it.volId);
+    const ch = vol.chapters.find((c) => c.n === it.n);
+    const file = INDEX.volumes.find((x) => x.id === it.volId).file;
+    return {
+      label: `第 ${String(it.n).padStart(3, '0')} 章　${it.title}`,
+      getBody: () => ch.body,
+      setBody: (b) => { ch.body = b; it.body = b; },   // LIB 供加密、FLAT 供重繪，兩邊都更新
+      buildFiles: async () => [{ path: 'data/' + file, content: JSON.stringify(await encJSON(KEY, JSON.stringify({ id: vol.id, title: vol.title, chapters: vol.chapters }))) }],
+    };
+  }
+  if (curType === 'alt') {
+    const it = ALTERNATES[curIdx];
+    const file = INDEX.alternates.file;
+    return {
+      label: it.title,
+      getBody: () => it.body,
+      setBody: (b) => { it.body = b; },
+      buildFiles: async () => [{ path: 'data/' + file, content: JSON.stringify(await encJSON(KEY, JSON.stringify({ chapters: ALTERNATES }))) }],
+    };
+  }
+  const it = SETTINGS[curIdx];   // 'set'
+  const file = INDEX.settings.file;
+  return {
+    label: it.title,
+    getBody: () => it.body,
+    setBody: (b) => { it.body = b; },
+    buildFiles: async () => [{ path: 'data/' + file, content: JSON.stringify(await encJSON(KEY, JSON.stringify({ docs: SETTINGS }))) }],
+  };
+}
+function openEditor() {
+  if (curIdx < 0) return;
+  if (!ghToken()) { alert('請先到「設定 Aa」最下方貼上 GitHub PAT，才能把編輯推回線上。'); return; }
+  const ed = currentEditable();
+  editOrig = ed.getBody();
+  $('#editTitle').textContent = ed.label;
+  $('#editArea').value = editOrig;
+  $('#editStatus').textContent = '';
+  $('#editor').classList.add('active');
+}
+function closeEditor() { $('#editor').classList.remove('active'); }
+async function saveEdit() {
+  const ed = currentEditable();
+  const newBody = $('#editArea').value;
+  if (newBody === editOrig) { closeEditor(); return; }   // 沒改就直接關
+  const btn = $('#editSave');
+  const prevUpdated = INDEX.updated;
+  btn.disabled = true; $('#editStatus').textContent = '加密並推送中…（首次可能要幾秒）';
+  ed.setBody(newBody);
+  INDEX.updated = new Date().toISOString();
+  try {
+    const files = await ed.buildFiles();
+    files.push({ path: 'data/index.json', content: JSON.stringify(INDEX) });
+    await ghCommit(files, '手機編輯：' + ed.label);
+    closeEditor();
+    openItem(curType, curIdx, curType === 'ch');   // 以新內容重繪
+    if ($('#library').classList.contains('active')) renderLibrary();
+  } catch (e) {
+    ed.setBody(editOrig); INDEX.updated = prevUpdated;   // 失敗 → 記憶體回滾
+    $('#editStatus').textContent = '✗ 推送失敗：' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+function updatePatStatus() {
+  const el = $('#patStatus'); if (!el) return;
+  el.textContent = ghToken() ? '✓ 已儲存 PAT（閱讀頁的 ✎ 可推送）' : '尚未設定；設定後閱讀頁 ✎ 才能推送。';
 }
 
 async function loadIndex() {
@@ -755,9 +910,16 @@ $('#tocBtn').onclick = () => openToc();
 $('#tocMask').onclick = () => $('#toc').classList.remove('active');
 $('#prevBtn').onclick = () => openItem(curType, curIdx - 1, false);
 $('#nextBtn').onclick = () => openItem(curType, curIdx + 1, false);
-$('#setBtn').onclick = () => $('#settings').classList.add('active');
+$('#setBtn').onclick = () => { updatePatStatus(); $('#settings').classList.add('active'); };
 $('#closeSetBtn').onclick = () => $('#settings').classList.remove('active');
 $('#setMask').onclick = () => $('#settings').classList.remove('active');
+// 編輯模式
+$('#editBtn').onclick = () => openEditor();
+$('#editCancel').onclick = () => closeEditor();
+$('#editSave').onclick = () => saveEdit();
+// GitHub PAT 存/清
+$('#patSave').onclick = () => { const v = $('#patInput').value.trim(); if (v) { localStorage.setItem(LS.ghpat, v); $('#patInput').value = ''; } updatePatStatus(); };
+$('#patClear').onclick = () => { localStorage.removeItem(LS.ghpat); updatePatStatus(); };
 $('#segSize').onclick = (e) => { if (e.target.dataset.size) { localStorage.setItem(LS.size, e.target.dataset.size); applyPrefs(); repaginate(); } };
 $('#segFont').onclick = (e) => { if (e.target.dataset.font) { localStorage.setItem(LS.font, e.target.dataset.font); applyPrefs(); repaginate(); } };
 $('#segTheme').onclick = (e) => { if (e.target.dataset.theme) { localStorage.setItem(LS.theme, e.target.dataset.theme); applyPrefs(); repaginate(); } };

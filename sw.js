@@ -1,5 +1,5 @@
 /* 墨刃 Service Worker：網路優先，開啟時盡量拿最新章節；離線時退回快取 */
-const CACHE = 'moren-v6';
+const CACHE = 'moren-v7';
 const SHELL = [
   './',
   './index.html',
