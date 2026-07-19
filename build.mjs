@@ -9,7 +9,7 @@
 // 密碼放在同層的 .passphrase（已被 .gitignore 排除，不會上傳）。
 // 加密方式：PBKDF2-SHA256(200000) 導出金鑰 → AES-256-GCM，與瀏覽器 WebCrypto 完全對應。
 
-import { pbkdf2Sync, randomBytes, createCipheriv } from 'node:crypto';
+import { pbkdf2Sync, randomBytes, createCipheriv, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, existsSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename } from 'node:path';
@@ -129,7 +129,10 @@ function scanSettings() {
 
 // ── 主流程 ──────────────────────────────────────────────
 const pass = readPassphrase();
-const salt = randomBytes(16);
+// 固定 salt（由密碼派生、每次 build 都一樣）：讓每次打包共用同一把 key，
+// 即使手機快取混到新舊兩次 build 的檔案、或 CDN 尚未同步完，也能用同一把 key 解開、不會打不開。
+// （每個檔案的 iv 仍每次隨機 → AES-GCM 密文每次不同，加密安全性不受影響。）
+const salt = createHash('sha256').update('moren-fixed-salt::v1::' + pass).digest().subarray(0, 16);
 const key = deriveKey(pass, salt);
 
 const volumes = scanVolumes();
