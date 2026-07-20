@@ -170,7 +170,7 @@ if (idx.settings && idx.settings.file && eligible(idx.settings.file)) {
   const docs = (JSON.parse(decrypt(key, JSON.parse(readFileSync(join(DATA, idx.settings.file), 'utf8')))).docs) || [];
   for (const doc of docs) {
     checked++;
-    const path = join(ROOT, doc.id + '.md');
+    const path = join(ROOT, '設定集', doc.id + '.md');
     if (!existsSync(path)) { report.push(`  ⚠ 設定 ${doc.id}.md 本地不存在，略過`); continue; }
     const raw = readFileSync(path, 'utf8');
     if (extractSettingBody(raw) === doc.body) continue;

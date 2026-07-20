@@ -26,7 +26,7 @@ const ITER = 200000;          // PBKDF2 迭代次數
 const HASH = 'sha256';        // 對應瀏覽器 'SHA-256'
 
 // 要放進 App「設定」區的設定文件（顯示順序）
-const SETTING_FILES = ['故事大綱.md', '世界觀設定.md', '人物設定.md', '肉戲設定.md', '文筆風格卡.md'];
+const SETTING_FILES = ['設定集/故事大綱.md', '設定集/世界觀設定.md', '設定集/人物設定.md', '設定集/肉戲設定.md', '設定集/文筆風格卡.md'];
 
 // ── 讀密碼 ──────────────────────────────────────────────
 function readPassphrase() {
