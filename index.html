@@ -264,6 +264,7 @@
 <div id="reader" class="screen">
   <div class="progress" id="progressBar"></div>
   <div class="topbar">
+    <button class="icon-btn wide" id="homeBtn" aria-label="回書架">書架</button>
     <button class="icon-btn" id="backBtn" aria-label="章節選單">☰</button>
     <button class="icon-btn wide" id="tocBtn" style="display:none">目錄</button>
     <div class="title" id="readerTopTitle"></div>
@@ -342,7 +343,7 @@
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
     </div>
-    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v7（2026.07.19 · 編輯）</div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v8（2026.07.20 · 書架置頂）</div>
   </div>
 </div>
 
@@ -361,7 +362,7 @@
   <div class="drawer-panel">
     <div class="drawer-head">
       <span class="dh-title">墨刃</span>
-      <button class="icon-btn wide" id="drawerHome">書架</button>
+      <button class="icon-btn wide" id="drawerClose">收合</button>
     </div>
     <div id="drawerNav"></div>
   </div>
@@ -905,7 +906,8 @@ $('#unlockBtn').onclick = () => { const p = $('#passInput').value.trim(); if (p)
 $('#passInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#unlockBtn').click(); });
 $('#backBtn').onclick = () => openDrawer();
 $('#drawerMask').onclick = () => closeDrawer();
-$('#drawerHome').onclick = () => { closeDrawer(); renderLibrary(); show('library'); };
+$('#homeBtn').onclick = () => { closeDrawer(); renderLibrary(); show('library'); };   // 頂列「書架」：一鍵回書架
+$('#drawerClose').onclick = () => closeDrawer();                                        // 抽屜「收合」：關閉左拉抽屜
 $('#tocBtn').onclick = () => openToc();
 $('#tocMask').onclick = () => $('#toc').classList.remove('active');
 $('#prevBtn').onclick = () => openItem(curType, curIdx - 1, false);
