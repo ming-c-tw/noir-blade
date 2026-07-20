@@ -144,7 +144,7 @@ for (const v of idx.volumes) {
   const volDir = findVolDir(vol.id);
   for (const ch of vol.chapters) {
     checked++;
-    const nnn = String(ch.n).padStart(3, '0');
+    const nnn = String(ch.n).padStart(4, '0');
     const local = volDir ? findChapterFile(volDir, ch.n) : null;
     if (local) {
       const raw = readFileSync(local, 'utf8');
