@@ -53,19 +53,20 @@ function encrypt(key, plaintextBuf) {
 }
 
 // ── 掃描書稿 ────────────────────────────────────────────
-// 卷資料夾：第XX卷_標題；章檔：NNN_標題.md；排除底線開頭（如 _備選版本）。
+// 卷資料夾：第XX卷_標題 或 楔子_標題；章檔：NNN_標題.md；排除底線開頭（如 _備選版本）。
 function scanVolumes() {
   if (!existsSync(SRC)) { console.error('✗ 找不到書稿來源：' + SRC); process.exit(1); }
   const volDirs = readdirSync(SRC, { withFileTypes: true })
-    .filter(d => d.isDirectory() && /^第.+卷/.test(d.name) && !d.name.startsWith('_'))
+    .filter(d => d.isDirectory() && (/^第.+卷/.test(d.name) || /^楔子/.test(d.name)) && !d.name.startsWith('_'))
     .map(d => d.name)
     .sort();
 
   const volumes = [];
   for (const vd of volDirs) {
+    const xm = vd.match(/^(楔子)[_·]?(.*)$/);
     const m = vd.match(/^(第.+?卷)[_·]?(.*)$/);
-    const volNo = m ? m[1] : vd;
-    const volSub = m && m[2] ? m[2].replace(/^_/, '') : '';
+    const volNo = xm ? xm[1] : (m ? m[1] : vd);
+    const volSub = xm ? (xm[2] ? xm[2].replace(/^_/, '') : '') : (m && m[2] ? m[2].replace(/^_/, '') : '');
     const title = volSub ? `${volNo}｜${volSub}` : volNo;
 
     const dir = join(SRC, vd);
@@ -86,7 +87,7 @@ function scanVolumes() {
       const body = lines.join('\n').replace(/<!--\s*肉\s*-->/g, '').replace(/^\n+/, '').replace(/\n+$/, '');
       chapters.push({ n, title: title2, body, mature });
     }
-    if (chapters.length) volumes.push({ id: 'vol' + volNo.replace(/\D/g, '').padStart(2, '0'), title, chapters });
+    if (chapters.length) volumes.push({ id: xm ? 'vol00' : 'vol' + volNo.replace(/\D/g, '').padStart(2, '0'), title, chapters });
   }
   return volumes;
 }
