@@ -475,7 +475,7 @@ function currentEditable() {
     const ch = vol.chapters.find((c) => c.n === it.n);
     const file = INDEX.volumes.find((x) => x.id === it.volId).file;
     return {
-      label: `第 ${String(it.n).padStart(3, '0')} 章　${it.title}`,
+      label: `第 ${String(it.n).padStart(4, '0')} 章　${it.title}`,
       getBody: () => ch.body,
       setBody: (b) => { ch.body = b; it.body = b; },   // LIB 供加密、FLAT 供重繪，兩邊都更新
       buildFiles: async () => [{ path: 'data/' + file, content: JSON.stringify(await encJSON(KEY, JSON.stringify({ id: vol.id, title: vol.title, chapters: vol.chapters }))) }],
@@ -626,7 +626,7 @@ function renderNav(container, opts) {
   LIB.forEach((v) => {
     const items = v.chapters.map((c) => {
       const fi = FLAT.find((f) => f.volId === v.id && f.n === c.n);
-      return { key: 'ch:' + fi.idx, num: String(c.n).padStart(3, '0'), title: c.title, mature: c.mature, onClick: () => opts.onPick('ch', fi.idx) };
+      return { key: 'ch:' + fi.idx, num: String(c.n).padStart(4, '0'), title: c.title, mature: c.mature, onClick: () => opts.onPick('ch', fi.idx) };
     });
     container.appendChild(makeBlock('vol:' + v.id, v.title, v.chapters.length + ' 章', items, opts.activeKey));
   });
@@ -737,7 +737,7 @@ function openItem(type, idx, save, startPage) {
   curType = type; curIdx = idx;
   const body = $('#chBody');
   if (type === 'ch') {
-    $('#chTitle').textContent = `第 ${String(it.n).padStart(3, '0')} 章　${it.title}`;
+    $('#chTitle').textContent = `第 ${String(it.n).padStart(4, '0')} 章　${it.title}`;
     $('#chVol').textContent = it.volTitle;
     body.className = 'body';
     body.innerHTML = renderBody(it.body);
