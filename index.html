@@ -72,6 +72,8 @@
     width: 38px; height: 38px; border-radius: 10px; font-size: 17px; display: grid; place-items: center; flex: none;
   }
   .icon-btn.wide { width: auto; padding: 0 12px; font-size: 13px; gap: 6px; }
+  .icon-btn.spin { animation: spin .8s linear infinite; }   /* 重新整理時轉圈回饋 */
+  @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── 目錄 ── */
   #library .head { padding: 22px 18px 8px; }
@@ -270,6 +272,7 @@
     <button class="icon-btn wide" id="homeBtn" aria-label="回書架">書架</button>
     <button class="icon-btn wide" id="tocBtn" style="display:none">目錄</button>
     <div class="title" id="readerTopTitle"></div>
+    <button class="icon-btn" id="refreshBtn" aria-label="重新整理">↻</button>
     <button class="icon-btn" id="editBtn" aria-label="編輯">✎</button>
     <button class="icon-btn" id="setBtn" aria-label="設定">Aa</button>
   </div>
@@ -345,7 +348,7 @@
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
     </div>
-    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v9（2026.07.20 · 收合固定）</div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v10（2026.07.21 · 重新整理）</div>
   </div>
 </div>
 
@@ -545,17 +548,13 @@ async function loadIndex() {
   return res.json();
 }
 
-// 用密碼嘗試解鎖：驗證 check → 解出全部卷
-async function unlock(pass) {
-  const key = await deriveKey(pass, INDEX.kdf);
-  const check = await decJSON(key, INDEX.check);   // 錯密碼會在此丟 GCM 驗證錯誤
-  if (check !== 'moren-ok') throw new Error('bad');
-  KEY = key;
+// 用目前 KEY 解密並載入全部內容（首次解鎖與「重新整理」共用）
+async function loadContent() {
   LIB = [];
   for (const v of INDEX.volumes) {
     const res = await fetch('data/' + v.file, { cache: 'no-cache' });
     const obj = await res.json();
-    LIB.push(JSON.parse(await decJSON(key, obj)));
+    LIB.push(JSON.parse(await decJSON(KEY, obj)));
   }
   FLAT = [];
   LIB.forEach((v) => v.chapters.forEach((c) => FLAT.push({ ...c, volId: v.id, volTitle: v.title, idx: FLAT.length })));
@@ -564,14 +563,46 @@ async function unlock(pass) {
   if (INDEX.alternates && INDEX.alternates.file) {
     const res = await fetch('data/' + INDEX.alternates.file, { cache: 'no-cache' });
     const obj = await res.json();
-    ALTERNATES = JSON.parse(await decJSON(key, obj)).chapters || [];
+    ALTERNATES = JSON.parse(await decJSON(KEY, obj)).chapters || [];
   }
   // 設定文件
   SETTINGS = [];
   if (INDEX.settings && INDEX.settings.file) {
     const res = await fetch('data/' + INDEX.settings.file, { cache: 'no-cache' });
     const obj = await res.json();
-    SETTINGS = JSON.parse(await decJSON(key, obj)).docs || [];
+    SETTINGS = JSON.parse(await decJSON(KEY, obj)).docs || [];
+  }
+}
+
+// 用密碼嘗試解鎖：驗證 check → 解出全部卷
+async function unlock(pass) {
+  const key = await deriveKey(pass, INDEX.kdf);
+  const check = await decJSON(key, INDEX.check);   // 錯密碼會在此丟 GCM 驗證錯誤
+  if (check !== 'moren-ok') throw new Error('bad');
+  KEY = key;
+  await loadContent();
+}
+
+// 重新整理：重抓線上最新書稿並重繪當前畫面（本地推完，手機不必關掉 App 重開）
+async function refreshContent() {
+  const btn = $('#refreshBtn');
+  if (btn.disabled) return;
+  btn.disabled = true; btn.classList.add('spin');
+  const savedType = curType, savedIdx = curIdx, wasReading = $('#reader').classList.contains('active');
+  try {
+    INDEX = await loadIndex();
+    const pass = localStorage.getItem(LS.pass);
+    if (pass) KEY = await deriveKey(pass, INDEX.kdf);   // 重新打包後 kdf salt 可能改變，重新 derive 最穩
+    await loadContent();                                 // 沒存密碼則沿用記憶體中的 KEY
+    if (wasReading && savedIdx >= 0 && listOf(savedType)[savedIdx]) {
+      openItem(savedType, savedIdx, true);               // 停在原本這章、沿用閱讀進度
+    } else {
+      renderLibrary(); show('library');
+    }
+  } catch (e) {
+    alert('重新整理失敗：' + (e.message || e) + '\n若持續失敗，請到設定登出後重新輸入密碼。');
+  } finally {
+    btn.classList.remove('spin'); btn.disabled = false;
   }
 }
 
@@ -914,6 +945,7 @@ $('#tocBtn').onclick = () => openToc();
 $('#tocMask').onclick = () => $('#toc').classList.remove('active');
 $('#prevBtn').onclick = () => openItem(curType, curIdx - 1, false);
 $('#nextBtn').onclick = () => openItem(curType, curIdx + 1, false);
+$('#refreshBtn').onclick = () => refreshContent();
 $('#setBtn').onclick = () => { updatePatStatus(); $('#settings').classList.add('active'); };
 $('#closeSetBtn').onclick = () => $('#settings').classList.remove('active');
 $('#setMask').onclick = () => $('#settings').classList.remove('active');
