@@ -72,8 +72,14 @@
     width: 38px; height: 38px; border-radius: 10px; font-size: 17px; display: grid; place-items: center; flex: none;
   }
   .icon-btn.wide { width: auto; padding: 0 12px; font-size: 13px; gap: 6px; }
-  .icon-btn.spin { animation: spin .8s linear infinite; }   /* 重新整理時轉圈回饋 */
-  @keyframes spin { to { transform: rotate(360deg); } }
+  .icon-btn.loading {   /* 重新整理時：墨金變色 + 脈動放大縮小回饋 */
+    color: var(--accent); border-color: var(--accent);
+    animation: refresh-pulse 1s ease-in-out infinite;
+  }
+  @keyframes refresh-pulse {
+    0%, 100% { transform: scale(1);    box-shadow: 0 0 0 0 rgba(200,185,143,0); }
+    50%      { transform: scale(1.2);  box-shadow: 0 0 12px 3px rgba(200,185,143,.5); }
+  }
 
   /* ── 目錄 ── */
   #library .head { padding: 22px 18px 8px; }
@@ -591,7 +597,7 @@ async function unlock(pass) {
 async function refreshContent() {
   const btn = $('#refreshBtn');
   if (btn.disabled) return;
-  btn.disabled = true; btn.classList.add('spin');
+  btn.disabled = true; btn.classList.add('loading');
   const savedType = curType, savedIdx = curIdx, wasReading = $('#reader').classList.contains('active');
   try {
     INDEX = await loadIndex();
@@ -606,7 +612,7 @@ async function refreshContent() {
   } catch (e) {
     alert('重新整理失敗：' + (e.message || e) + '\n若持續失敗，請到設定登出後重新輸入密碼。');
   } finally {
-    btn.classList.remove('spin'); btn.disabled = false;
+    btn.classList.remove('loading'); btn.disabled = false;
   }
 }
 
@@ -677,7 +683,9 @@ function renderNav(container, opts) {
 
 function renderLibrary() {
   const d = INDEX.updated ? new Date(INDEX.updated) : null;
-  $('#libMeta').textContent = `共 ${LIB.length} 卷 · ${FLAT.length} 章` + (d ? ` · 更新於 ${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}` : '');
+  const p2 = (n) => String(n).padStart(2, '0');
+  const stamp = d ? ` · 更新於 ${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}` : '';
+  $('#libMeta').textContent = `共 ${LIB.length} 卷 · ${FLAT.length} 章` + stamp;
   const last = getLast();
   const box = $('#continueBox');
   if (last && FLAT[last.idx]) {
