@@ -77,6 +77,8 @@
 
   /* ── 目錄 ── */
   #library .head { padding: 22px 18px 8px; }
+  #library .head-row { display: flex; align-items: center; gap: 10px; }   /* 大標與重新整理按鈕同排 */
+  #library .head-row h1 { flex: 1; }
   #library .head h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: 8px; color: var(--accent); }
   #library .head .meta { color: var(--sub); font-size: 12px; margin-top: 8px; }
   .continue {
@@ -256,7 +258,10 @@
 <!-- 目錄 -->
 <div id="library" class="screen">
   <div class="head">
-    <h1>墨刃</h1>
+    <div class="head-row">
+      <h1>墨刃</h1>
+      <button class="icon-btn" id="refreshBtn" aria-label="重新整理">↻</button>
+    </div>
     <div class="meta" id="libMeta"></div>
   </div>
   <div id="continueBox"></div>
@@ -272,7 +277,6 @@
     <button class="icon-btn wide" id="homeBtn" aria-label="回書架">書架</button>
     <button class="icon-btn wide" id="tocBtn" style="display:none">目錄</button>
     <div class="title" id="readerTopTitle"></div>
-    <button class="icon-btn" id="refreshBtn" aria-label="重新整理">↻</button>
     <button class="icon-btn" id="editBtn" aria-label="編輯">✎</button>
     <button class="icon-btn" id="setBtn" aria-label="設定">Aa</button>
   </div>
@@ -348,7 +352,7 @@
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
     </div>
-    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v10（2026.07.21 · 重新整理）</div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v11（2026.07.22 · 重新整理移至書架）</div>
   </div>
 </div>
 
