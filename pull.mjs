@@ -63,11 +63,12 @@ function headingOf(raw) {
 
 // ── 定位本地檔 ──────────────────────────────────────────
 function findVolDir(volId) {
-  const want = parseInt((volId.match(/\d+/) || ['0'])[0], 10);   // 'vol01' → 1
+  const want = parseInt((volId.match(/\d+/) || ['0'])[0], 10);   // 'vol01' → 1；'vol00' → 0（楔子）
   const dirs = readdirSync(SRC, { withFileTypes: true })
-    .filter(d => d.isDirectory() && /^第.+卷/.test(d.name) && !d.name.startsWith('_'))
+    .filter(d => d.isDirectory() && (/^第.+卷/.test(d.name) || /^楔子/.test(d.name)) && !d.name.startsWith('_'))
     .map(d => d.name);
   const hit = dirs.find(name => {
+    if (/^楔子/.test(name)) return want === 0;                   // 楔子 ＝ vol00（與 build.mjs scanVolumes 對齊）
     const m = name.match(/第0*(\d+)卷/);
     return m && parseInt(m[1], 10) === want;
   });
