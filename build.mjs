@@ -176,14 +176,20 @@ const index = {
   volumes: [],
 };
 
-let totalCh = 0, totalChars = 0;
+// 純正文去空白計法：去掉所有空白與標點符號，只算實際文字（Ming 定的分卷字數口徑）
+const pureLen = (s) => s.replace(/[\s\p{P}\p{S}]/gu, '').length;
+let totalCh = 0, totalChars = 0, totalPure = 0;
+const wordReport = [];   // 逐卷字數，供推送後「回報三項」直接取用
 for (const v of volumes) {
   const file = v.id + '.json';
   const payload = Buffer.from(JSON.stringify({ id: v.id, title: v.title, chapters: v.chapters }), 'utf8');
   writeFileSync(join(OUT, file), JSON.stringify(encrypt(key, payload)));
   index.volumes.push({ id: v.id, file, chapters: v.chapters.length });
+  const volPure = v.chapters.reduce((s, c) => s + pureLen(c.body), 0);
   totalCh += v.chapters.length;
   totalChars += v.chapters.reduce((s, c) => s + c.body.length, 0);
+  totalPure += volPure;
+  wordReport.push({ title: v.title, chapters: v.chapters.length, pure: volPure });
 }
 
 // 備選版本（加密）
@@ -204,9 +210,15 @@ if (settings.length) {
 
 writeFileSync(join(OUT, 'index.json'), JSON.stringify(index));
 
-console.log(`✓ 打包完成：${volumes.length} 卷、${totalCh} 章、約 ${totalChars.toLocaleString()} 字` +
+console.log(`✓ 打包完成：${volumes.length} 卷、${totalCh} 章、約 ${totalChars.toLocaleString()} 字（含標點）` +
   (alternates.length ? `、${alternates.length} 篇備選` : '') +
   (settings.length ? `、${settings.length} 份設定` : '') + ` → ${OUT}`);
+
+// 推送後「回報三項」用（Ming 定）：① 總章數 ② 總字數 ③ 逐卷字數（純正文去空白計法）
+console.log(`── 字數統計（純正文去空白）── 共 ${totalCh} 章、${totalPure.toLocaleString()} 字`);
+for (const r of wordReport) {
+  console.log(`   · ${r.title}：${r.chapters} 章、${r.pure.toLocaleString()} 字`);
+}
 
 // ── 可選：推上 GitHub ───────────────────────────────────
 if (process.argv.includes('--push')) {
