@@ -245,6 +245,48 @@
     padding: 16px 18px calc(env(safe-area-inset-bottom) + 16px);
   }
   #editStatus { padding: 8px 16px calc(env(safe-area-inset-bottom) + 8px); font-size: 12px; color: var(--seal); min-height: 16px; background: var(--panel); }
+
+  /* ── 搜尋 ── */
+  #search { position: fixed; inset: 0; z-index: 45; display: none; flex-direction: column; background: var(--bg); }
+  #search.active { display: flex; }
+  #search .srch-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  #search .srch-bar input {
+    flex: 1; padding: 11px 14px; font-size: 16px; background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 10px; color: var(--txt); outline: none;
+  }
+  #search .srch-bar input:focus { border-color: var(--accent); }
+  #search .srch-filter { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+  #search .srch-filter button {
+    flex: 1; padding: 8px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--panel2); color: var(--txt); font-size: 13px;
+  }
+  #search .srch-filter button.on { border-color: var(--accent); color: var(--accent); }
+  #search .srch-filter button:disabled { opacity: .35; }
+  #searchResults { flex: 1; overflow-y: auto; padding: 6px 0 calc(env(safe-area-inset-bottom) + 20px); }
+  #searchMeta { padding: 12px 16px; color: var(--sub); font-size: 12px; }
+  .sr-item { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .sr-item:active { background: var(--panel2); }
+  .sr-src { color: var(--accent); font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 7px; }
+  .sr-src .sr-badge { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; font-size: 10px; color: var(--sub); flex: none; }
+  .sr-snip { font-size: 14px; line-height: 1.7; color: var(--txt); }
+  .sr-snip mark, mark.sh { background: rgba(200,185,143,.28); color: var(--accent); border-radius: 3px; padding: 0 1px; }
+  mark.sh.cur { background: var(--accent); color: #1a1206; }
+  :root[data-theme="light"] mark.sh.cur { color: #fff8e7; }
+
+  /* 章內命中導航（搜尋跳轉後的浮條） */
+  #searchNav {
+    position: fixed; z-index: 22; right: 12px; top: calc(env(safe-area-inset-top) + 58px);
+    display: none; align-items: center; gap: 4px;
+    background: var(--panel); border: 1px solid var(--accent); border-radius: 999px;
+    padding: 4px 6px 4px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.35);
+  }
+  #searchNav.active { display: flex; }
+  #searchNav .sn-info { font-size: 12px; color: var(--sub); font-variant-numeric: tabular-nums; margin-right: 4px; }
+  #searchNav button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel2); color: var(--txt); font-size: 15px; display: grid; place-items: center; }
+  #searchNav button:active { border-color: var(--accent); }
 </style>
 </head>
 <body>
@@ -283,6 +325,7 @@
     <button class="icon-btn wide" id="homeBtn" aria-label="回書架">書架</button>
     <button class="icon-btn wide" id="tocBtn" style="display:none">目錄</button>
     <div class="title" id="readerTopTitle"></div>
+    <button class="icon-btn" id="searchBtn" aria-label="搜尋"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.5" y2="16.5"></line></svg></button>
     <button class="icon-btn" id="editBtn" aria-label="編輯">✎</button>
     <button class="icon-btn" id="setBtn" aria-label="設定">Aa</button>
   </div>
@@ -358,7 +401,7 @@
       <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
       <button class="icon-btn wide" id="closeSetBtn">完成</button>
     </div>
-    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v11（2026.07.22 · 重新整理移至書架）</div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v12（2026.07.28 · 新增全文搜尋）</div>
   </div>
 </div>
 
@@ -394,6 +437,29 @@
   <div id="editStatus"></div>
 </div>
 
+<!-- 搜尋 -->
+<div id="search">
+  <div class="srch-bar">
+    <button class="icon-btn wide" id="searchCancel">取消</button>
+    <input id="searchInput" type="search" inputmode="search" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="搜尋關鍵字…" enterkeyhint="search">
+  </div>
+  <div class="srch-filter" id="searchFilter">
+    <button data-filter="all" class="on">全部</button>
+    <button data-filter="ch" id="sfChap">章節</button>
+    <button data-filter="set" id="sfSet">設定</button>
+    <button data-filter="alt" id="sfAlt">備選</button>
+  </div>
+  <div id="searchResults"></div>
+</div>
+
+<!-- 章內命中導航（搜尋跳轉後浮條）-->
+<div id="searchNav">
+  <span class="sn-info" id="searchNavInfo"></span>
+  <button id="hitPrev" aria-label="上一個命中">‹</button>
+  <button id="hitNext" aria-label="下一個命中">›</button>
+  <button id="hitClose" aria-label="關閉高亮">✕</button>
+</div>
+
 <script>
 const $ = (s) => document.querySelector(s);
 const LS = {
@@ -421,6 +487,11 @@ let pageW = 0, pageCount = 1, curPage = 0;   // 翻頁模式狀態
 let curSections = [];    // 目前設定文件的段落（供段落選閱）
 let collapseState = {};   // 各區塊收合狀態（跨畫面保留），key: 'vol:xxx' | 'alt' | 'set'
 let collapseInit = false;
+// ── 搜尋狀態 ──
+let SFILTER = 'all';           // 篩選器：all 全部 | ch 章節 | set 設定 | alt 備選
+let searchHits = [];           // 當前章高亮的 <mark> 元素清單
+let searchHitIdx = -1;         // 當前聚焦第幾個命中
+const SEARCH_CAP = 300;        // 結果上限，避免搜常見字時癱瘓畫面
 
 // ── 工具 ──
 const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -778,6 +849,7 @@ function openItem(type, idx, save, startPage) {
   const it = list[idx];
   if (!it) return;
   curType = type; curIdx = idx;
+  searchHits = []; searchHitIdx = -1; $('#searchNav').classList.remove('active');   // 換頁先清掉上一次的搜尋高亮狀態
   const body = $('#chBody');
   if (type === 'ch') {
     $('#chTitle').textContent = `第 ${String(it.n).padStart(4, '0')} 章　${it.title}`;
@@ -946,6 +1018,121 @@ function applyPrefs() {
   if (isPaged()) $('#pageInner').style.transition = ANIM ? 'transform .2s ease' : 'none';
 }
 
+// ── 搜尋（全文，含篩選器）──
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+// 依篩選器組出要搜的來源清單
+function searchSources() {
+  const out = [];
+  if (SFILTER === 'all' || SFILTER === 'ch')
+    FLAT.forEach((c, i) => out.push({ type: 'ch', idx: i, badge: c.volTitle, title: `第 ${String(c.n).padStart(4, '0')} 章　${c.title}`, body: c.body || '' }));
+  if (SFILTER === 'all' || SFILTER === 'set')
+    SETTINGS.forEach((d, i) => out.push({ type: 'set', idx: i, badge: '設定', title: d.title, body: d.body || '' }));
+  if (SFILTER === 'all' || SFILTER === 'alt')
+    ALTERNATES.forEach((d, i) => out.push({ type: 'alt', idx: i, badge: '備選', title: d.title, body: d.body || '' }));
+  return out;
+}
+
+function openSearch() {
+  // 空的類別禁用；若目前篩選正指向空類別，退回「全部」
+  $('#sfSet').disabled = !SETTINGS.length;
+  $('#sfAlt').disabled = !ALTERNATES.length;
+  if ((SFILTER === 'set' && !SETTINGS.length) || (SFILTER === 'alt' && !ALTERNATES.length)) SFILTER = 'all';
+  $('#searchFilter').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.filter === SFILTER));
+  $('#search').classList.add('active');
+  const inp = $('#searchInput');
+  setTimeout(() => inp.focus(), 60);
+  if (inp.value.trim()) doSearch(); else $('#searchResults').innerHTML = '<div id="searchMeta">輸入關鍵字開始搜尋。</div>';
+}
+function closeSearch() { $('#search').classList.remove('active'); }
+
+function doSearch() {
+  const kw = $('#searchInput').value.trim();
+  const box = $('#searchResults');
+  if (!kw) { box.innerHTML = '<div id="searchMeta">輸入關鍵字開始搜尋。</div>'; return; }
+  const lower = kw.toLowerCase();
+  const results = []; let total = 0, capped = false;
+  for (const src of searchSources()) {
+    const lt = src.body.toLowerCase();
+    let pos = lt.indexOf(lower), occ = 0;
+    while (pos !== -1) {
+      total++;
+      if (results.length < SEARCH_CAP) {
+        const s = Math.max(0, pos - 18), e = Math.min(src.body.length, pos + kw.length + 24);
+        const pre = (s > 0 ? '…' : '') + src.body.slice(s, pos);
+        const hit = src.body.slice(pos, pos + kw.length);
+        const post = src.body.slice(pos + kw.length, e) + (e < src.body.length ? '…' : '');
+        results.push({ type: src.type, idx: src.idx, occ, badge: src.badge, title: src.title,
+          snippet: esc(pre.replace(/\s+/g, ' ')) + '<mark>' + esc(hit) + '</mark>' + esc(post.replace(/\s+/g, ' ')) });
+      } else capped = true;
+      occ++; pos = lt.indexOf(lower, pos + kw.length);
+    }
+  }
+  renderResults(results, total, capped, kw);
+}
+
+function renderResults(results, total, capped, kw) {
+  const box = $('#searchResults');
+  if (!total) { box.innerHTML = `<div id="searchMeta">找不到「${esc(kw)}」。</div>`; return; }
+  let html = `<div id="searchMeta">找到 ${total} 處${capped ? `，僅顯示前 ${SEARCH_CAP} 筆（關鍵字再精確些）` : ''}</div>`;
+  results.forEach((r, i) => {
+    html += `<div class="sr-item" data-i="${i}"><div class="sr-src"><span class="sr-badge">${esc(r.badge)}</span>${esc(r.title)}</div><div class="sr-snip">${r.snippet}</div></div>`;
+  });
+  box.innerHTML = html;
+  box.querySelectorAll('.sr-item').forEach((el) => { const r = results[+el.dataset.i]; el.onclick = () => jumpToResult(r, kw); });
+}
+
+function jumpToResult(r, kw) {
+  closeSearch();
+  openItem(r.type, r.idx, true);
+  // 等 openItem 完成渲染（翻頁模式還要量測）後，再上高亮並定位
+  requestAnimationFrame(() => requestAnimationFrame(() => highlightInReader(kw, r.occ)));
+}
+
+// ── 章內高亮與命中導航 ──
+function clearHighlights() {
+  const body = $('#chBody');
+  body.querySelectorAll('mark.sh').forEach((m) => m.replaceWith(document.createTextNode(m.textContent)));
+  body.normalize();
+  searchHits = []; searchHitIdx = -1;
+  $('#searchNav').classList.remove('active');
+}
+function highlightInReader(kw, occ) {
+  clearHighlights();
+  const body = $('#chBody');
+  const lower = kw.toLowerCase();
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    const text = node.nodeValue, lt = text.toLowerCase();
+    if (!lt.includes(lower)) return;
+    const frag = document.createDocumentFragment();
+    let i = 0, pos;
+    while ((pos = lt.indexOf(lower, i)) !== -1) {
+      if (pos > i) frag.appendChild(document.createTextNode(text.slice(i, pos)));
+      const mk = document.createElement('mark'); mk.className = 'sh'; mk.textContent = text.slice(pos, pos + kw.length);
+      frag.appendChild(mk); i = pos + kw.length;
+    }
+    if (i < text.length) frag.appendChild(document.createTextNode(text.slice(i)));
+    node.replaceWith(frag);
+  });
+  searchHits = [...body.querySelectorAll('mark.sh')];
+  if (!searchHits.length) return;
+  gotoHit(Math.min(occ, searchHits.length - 1));
+}
+function gotoHit(k) {
+  if (!searchHits.length) return;
+  const n = searchHits.length;
+  k = ((k % n) + n) % n;                          // 環狀：頭尾相接
+  if (searchHitIdx >= 0 && searchHits[searchHitIdx]) searchHits[searchHitIdx].classList.remove('cur');
+  searchHitIdx = k;
+  const el = searchHits[k]; el.classList.add('cur');
+  if (isPaged()) { measurePaged(); gotoPage(pageOfElement(el), false); }
+  else { window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 96, behavior: 'smooth' }); }
+  $('#searchNavInfo').textContent = (k + 1) + ' / ' + n;
+  $('#searchNav').classList.add('active');
+}
+
 // ── 事件綁定 ──
 $('#unlockBtn').onclick = () => { const p = $('#passInput').value.trim(); if (p) doUnlock(p, $('#rememberChk').checked); };
 $('#passInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#unlockBtn').click(); });
@@ -999,6 +1186,21 @@ $('#forgetBtn').onclick = () => {
   $('#settings').classList.remove('active'); $('#passInput').value = '';
   show('gate'); $('#passInput').focus();
 };
+
+// ── 搜尋事件 ──
+$('#searchBtn').onclick = () => openSearch();
+$('#searchCancel').onclick = () => closeSearch();
+$('#searchInput').addEventListener('input', debounce(doSearch, 180));
+$('#searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+$('#searchFilter').onclick = (e) => {
+  const f = e.target.dataset.filter; if (!f || e.target.disabled) return;
+  SFILTER = f;
+  $('#searchFilter').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.filter === f));
+  doSearch();
+};
+$('#hitPrev').onclick = () => gotoHit(searchHitIdx - 1);
+$('#hitNext').onclick = () => gotoHit(searchHitIdx + 1);
+$('#hitClose').onclick = () => clearHighlights();
 
 // ── 啟動 ──
 (async function init() {
