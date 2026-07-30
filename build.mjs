@@ -53,7 +53,8 @@ function encrypt(key, plaintextBuf) {
 }
 
 // ── 掃描書稿 ────────────────────────────────────────────
-// 卷資料夾：第XX卷_標題 或 楔子_標題；章檔：NNN_標題.md；排除底線開頭（如 _備選版本）。
+// 卷資料夾：第XX卷_標題（含「第00卷」＝原「楔子」，2026-07-30 改名）；章檔：NNN_標題.md；排除底線開頭（如 _備選版本）。
+// ⚠「楔子_」那條 regex 與 xm 分支保留作舊相容，現已無資料夾命中；第00卷 走第一條分支、算出的 id 同樣是 vol00（故 data/vol00.json 與手機端閱讀狀態不受改名影響）。
 function scanVolumes() {
   if (!existsSync(SRC)) { console.error('✗ 找不到書稿來源：' + SRC); process.exit(1); }
   const volDirs = readdirSync(SRC, { withFileTypes: true })

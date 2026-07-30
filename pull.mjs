@@ -63,7 +63,7 @@ function headingOf(raw) {
 
 // ── 定位本地檔 ──────────────────────────────────────────
 function findVolDir(volId) {
-  const want = parseInt((volId.match(/\d+/) || ['0'])[0], 10);   // 'vol01' → 1；'vol00' → 0（楔子）
+  const want = parseInt((volId.match(/\d+/) || ['0'])[0], 10);   // 'vol01' → 1；'vol00' → 0（＝第00卷，原「楔子」）
   const dirs = readdirSync(SRC, { withFileTypes: true })
     .filter(d => d.isDirectory() && (/^第.+卷/.test(d.name) || /^楔子/.test(d.name)) && !d.name.startsWith('_'))
     .map(d => d.name);
