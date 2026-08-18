@@ -1,0 +1,1360 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="robots" content="noindex, nofollow">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<title>墨刃</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #15181e;
+    --panel2: #1c2028;
+    --line: #2a2f38;
+    --txt: #e8e6e0;
+    --sub: #8a8f98;
+    --accent: #c8b98f;     /* 墨金 */
+    --seal: #b02e28;       /* 朱紅 */
+    --read-size: 19px;
+    --read-lh: 1.95;
+    --read-font: "Noto Serif TC", "Source Han Serif TC", "Songti TC", "STSong", serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--txt);
+    font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Helvetica Neue", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    color-scheme: dark;
+    overscroll-behavior-y: contain;
+  }
+  .screen { display: none; min-height: 100%; }
+  .screen.active { display: block; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ── 密碼閘 ── */
+  #gate { display: none; place-items: center; min-height: 100dvh; padding: 24px; text-align: center; }
+  #gate.active { display: grid; }
+  .gate-box { width: 100%; max-width: 320px; }
+  .gate-mark { font-size: 44px; font-weight: 800; letter-spacing: 6px; color: var(--accent); margin-bottom: 6px; }
+  .gate-sub { color: var(--sub); font-size: 13px; margin-bottom: 28px; }
+  #passInput {
+    width: 100%; padding: 14px 16px; font-size: 16px; text-align: center; letter-spacing: 2px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; color: var(--txt); outline: none;
+  }
+  #passInput:focus { border-color: var(--accent); }
+  .gate-remember { display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--sub); font-size: 13px; margin: 16px 0 20px; }
+  .gate-remember input { width: 16px; height: 16px; accent-color: var(--accent); }
+  .btn-primary {
+    width: 100%; padding: 14px; font-size: 16px; font-weight: 700; border: none; border-radius: 12px;
+    background: var(--accent); color: #1a1206;
+  }
+  .btn-primary:disabled { opacity: .5; }
+  .gate-err { color: var(--seal); font-size: 13px; min-height: 18px; margin-top: 14px; }
+
+  /* ── 頂列 ── */
+  .topbar {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 10px;
+    padding: calc(env(safe-area-inset-top) + 10px) 14px 10px;
+    background: rgba(15,17,21,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+  }
+  .topbar .title { flex: 1; font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .icon-btn {
+    background: var(--panel); border: 1px solid var(--line); color: var(--txt);
+    width: 38px; height: 38px; border-radius: 10px; font-size: 17px; display: grid; place-items: center; flex: none;
+  }
+  .icon-btn.wide { width: auto; padding: 0 12px; font-size: 13px; gap: 6px; }
+  .icon-btn.refreshing {   /* 重新整理時：墨金變色 + 發光回饋（不放大縮小；避開通用 .loading 的 padding） */
+    color: var(--accent); border-color: var(--accent);
+    animation: refresh-pulse 1s ease-in-out infinite;
+  }
+  @keyframes refresh-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(200,185,143,0); }
+    50%      { box-shadow: 0 0 12px 3px rgba(200,185,143,.5); }
+  }
+
+  /* ── 目錄 ── */
+  #library .head { padding: 22px 18px 8px; }
+  #library .head-row { display: flex; align-items: center; gap: 10px; }   /* 大標與重新整理按鈕同排 */
+  #library .head-row h1 { flex: 1; }
+  #library .head h1 { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: 8px; color: var(--accent); }
+  #library .head .meta { color: var(--sub); font-size: 12px; margin-top: 8px; }
+  .continue {
+    margin: 14px 16px 6px; padding: 14px 16px; border-radius: 14px;
+    background: linear-gradient(135deg, var(--panel2), var(--panel)); border: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .continue .c-label { font-size: 11px; color: var(--accent); letter-spacing: 1px; }
+  .continue .c-title { font-size: 15px; font-weight: 700; margin-top: 3px; }
+  .continue .c-go { margin-left: auto; color: var(--sub); font-size: 22px; }
+  .vol { margin: 10px 12px; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--panel); }
+  .vol-h { display: flex; align-items: center; gap: 10px; padding: 14px 16px; font-weight: 700; font-size: 15px; }
+  .vol-h .count { color: var(--sub); font-weight: 400; font-size: 12px; }
+  .vol-h .caret { margin-left: auto; color: var(--sub); transition: transform .2s; }
+  .vol.collapsed .caret { transform: rotate(-90deg); }
+  .vol.collapsed .ch-list { display: none; }
+  .ch-list { border-top: 1px solid var(--line); }
+  .ch {
+    display: flex; align-items: center; gap: 12px; padding: 13px 16px; border-top: 1px solid var(--line);
+    font-size: 15px;
+  }
+  .ch:first-child { border-top: none; }
+  .ch .num { color: var(--accent); font-size: 12px; font-variant-numeric: tabular-nums; min-width: 30px; }
+  .ch .t { flex: 1; }
+  .ch.reading { background: var(--panel2); }
+  .ch.reading .t::after { content: "· 讀到這"; color: var(--accent); font-size: 11px; margin-left: 8px; }
+
+  /* ── 閱讀 ── */
+  #reader .content {
+    max-width: 720px; margin: 0 auto;
+    padding: 18px 22px calc(env(safe-area-inset-bottom) + 96px);
+  }
+  #reader .ch-title { font-size: 22px; font-weight: 800; margin: 10px 0 4px; color: var(--accent); font-family: var(--read-font); }
+  #reader .ch-vol { color: var(--sub); font-size: 12px; margin-bottom: 22px; }
+  #reader .body p {
+    font-family: var(--read-font); font-size: var(--read-size); line-height: var(--read-lh);
+    margin: 0 0 1.05em; text-indent: 2em; text-align: justify; letter-spacing: .3px; color: var(--txt);
+  }
+  #reader .body .divider { text-align: center; color: var(--sub); margin: 1.6em 0; letter-spacing: 8px; }
+  .reader-nav {
+    position: fixed; left: 0; right: 0; bottom: 0; display: flex; gap: 10px;
+    padding: 7px 14px calc(env(safe-area-inset-bottom) + 7px);
+    background: rgba(15,17,21,.94); backdrop-filter: blur(8px); border-top: 1px solid var(--line);
+  }
+  .reader-nav button {
+    flex: 1; padding: 7px 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--txt); font-size: 14px; font-weight: 600;
+  }
+  .reader-nav button:disabled { opacity: .35; }
+  .progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent); width: 0; z-index: 20; transition: width .1s; }
+
+  /* ── 設定面板 ── */
+  #settings, #toc { position: fixed; inset: 0; z-index: 30; display: none; }
+  #settings.active, #toc.active { display: block; }
+  #settings .mask, #toc .mask { position: absolute; inset: 0; background: rgba(0,0,0,.5); }
+  #settings .sheet, #toc .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; background: var(--panel);
+    border-radius: 18px 18px 0 0; padding: 20px 20px calc(env(safe-area-inset-bottom) + 24px);
+    border-top: 1px solid var(--line);
+  }
+  #settings h3, #toc h3 { margin: 0 0 16px; font-size: 15px; }
+  .set-row { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .set-row .lbl { width: 64px; color: var(--sub); font-size: 13px; }
+  .seg { display: flex; flex: 1; gap: 8px; }
+  .seg button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel2); color: var(--txt); font-size: 14px; }
+  .seg button.on { border-color: var(--accent); color: var(--accent); }
+  .set-link { color: var(--seal); font-size: 13px; background: none; border: none; padding: 8px 0; }
+
+  /* ── 設定文件（Markdown）排版 ── */
+  .md { font-size: var(--read-size); line-height: 1.85; }
+  .md h1, .md h2, .md h3, .md h4 { color: var(--accent); line-height: 1.4; margin: 1.4em 0 .5em; }
+  .md h1 { font-size: 1.5em; }
+  .md h2 { font-size: 1.28em; border-bottom: 1px solid var(--line); padding-bottom: .3em; }
+  .md h3 { font-size: 1.12em; }
+  .md h4 { font-size: 1em; color: var(--txt); }
+  .md p { margin: 0 0 .9em; text-align: justify; }
+  .md ul, .md ol { margin: 0 0 .9em; padding-left: 1.4em; }
+  .md li { margin: .3em 0; }
+  .md strong { color: #fff; font-weight: 700; }
+  .md em { color: var(--accent); font-style: normal; }
+  .md code { background: var(--panel2); border-radius: 5px; padding: 1px 5px; font-size: .9em; }
+  .md blockquote { margin: 0 0 .9em; padding: .5em .9em; border-left: 3px solid var(--accent); background: var(--panel); color: var(--sub); border-radius: 0 8px 8px 0; }
+  .md blockquote p { margin: 0; }
+  .md hr { border: none; border-top: 1px solid var(--line); margin: 1.4em 0; }
+  /* 表格改卡片式（每列一張卡，欄名當標籤）——手機好讀 */
+  .md .tbl-cards { margin: 0 0 1em; }
+  .md .trow { border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; margin: 0 0 10px; background: var(--panel); }
+  .md .trow-h { font-weight: 700; color: var(--accent); margin-bottom: 6px; font-size: 1.02em; }
+  .md .tcell { margin: 5px 0; line-height: 1.7; }
+  .md .tcell .tk { color: var(--sub); font-size: .86em; margin-right: 5px; }
+
+  /* ── 淺色主題（米黃底·鐵灰字）── */
+  :root[data-theme="light"] {
+    --bg: #f3ead6; --panel: #ece1c8; --panel2: #e4d6b8; --line: #d8c9a6;
+    --txt: #3d434a; --sub: #8a8474; --accent: #96741f; --seal: #a3352f;
+  }
+  :root[data-theme="light"] body { color-scheme: light; }
+  :root[data-theme="light"] .btn-primary { color: #fff8e7; }
+  :root[data-theme="light"] .md strong { color: #22262b; }
+  :root[data-theme="light"] .topbar { background: rgba(243,234,214,.92); }
+  :root[data-theme="light"] .reader-nav { background: rgba(243,234,214,.94); }
+  :root[data-theme="light"] #gate { background: var(--bg); }
+
+  /* ── 翻頁模式 ── */
+  #pageIndicator { display: none; }
+  #reader.paged .content { position: fixed; left: 0; right: 0; bottom: 0; overflow: hidden; padding: 6px 0; max-width: none; margin: 0; cursor: pointer; }
+  #reader.paged .pageport { margin: 0 auto; overflow: hidden; }
+  #reader.paged #pageInner { column-fill: auto; }
+  #reader.paged .reader-nav { display: none; }
+  #reader.paged #pageIndicator {
+    display: block; position: fixed; left: 0; right: 0; bottom: calc(env(safe-area-inset-bottom) + 5px);
+    text-align: center; color: var(--sub); font-size: 11px; pointer-events: none; z-index: 15;
+  }
+
+  /* 18+ 標籤 */
+  .tag18 { display: inline-block; background: var(--seal); color: #fff; font-size: 10px; line-height: 1.5; padding: 0 5px; border-radius: 5px; margin-left: 6px; font-weight: 700; letter-spacing: .5px; vertical-align: middle; }
+
+  /* 段落選閱（目錄）清單 */
+  #tocList { max-height: 62vh; overflow-y: auto; margin: 0 -4px; }
+  .toc-item { padding: 11px 8px; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--txt); }
+  .toc-item.lv3 { padding-left: 24px; color: var(--sub); font-size: 13px; }
+  .toc-item:active { background: var(--panel2); }
+
+  /* 左拉式章節抽屜 */
+  #drawer { position: fixed; inset: 0; z-index: 40; pointer-events: none; }
+  #drawer.active { pointer-events: auto; }
+  #drawer .mask { position: absolute; inset: 0; background: rgba(0,0,0,.5); opacity: 0; transition: opacity .22s; }
+  #drawer.active .mask { opacity: 1; }
+  .drawer-panel {
+    position: absolute; top: 0; bottom: 0; left: 0; width: 84%; max-width: 340px;
+    background: var(--bg); border-right: 1px solid var(--line);
+    padding: calc(env(safe-area-inset-top) + 12px) 0 0;
+    transform: translateX(-100%); transition: transform .22s ease;
+    display: flex; flex-direction: column;   /* head 固定、只有章節清單捲動 */
+  }
+  #drawer.active .drawer-panel { transform: translateX(0); }
+  .drawer-head { display: flex; align-items: center; gap: 8px; padding: 4px 16px 12px; flex: none; }   /* 固定在頂部，不隨捲動跑掉 */
+  .drawer-head .dh-title { flex: 1; font-size: 20px; font-weight: 800; color: var(--accent); letter-spacing: 4px; }
+  #drawerNav { flex: 1; overflow-y: auto; padding: 0 8px calc(env(safe-area-inset-bottom) + 20px); }   /* 只有章節清單這區捲動 */
+  .drawer-panel .vol { margin: 8px 4px; }
+
+  .loading { text-align: center; color: var(--sub); padding: 60px 20px; font-size: 14px; }
+
+  /* ── 編輯模式 ── */
+  #editor { position: fixed; inset: 0; z-index: 50; display: none; flex-direction: column; background: var(--bg); }
+  #editor.active { display: flex; }
+  #editor .ed-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  #editor .ed-title { flex: 1; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--accent); }
+  #editor .ed-save { background: var(--accent); color: #1a1206; border-color: var(--accent); font-weight: 700; }
+  #editor .ed-save:disabled { opacity: .5; }
+  :root[data-theme="light"] #editor .ed-save { color: #fff8e7; }
+  #editArea {
+    flex: 1; width: 100%; border: none; outline: none; resize: none; background: var(--bg); color: var(--txt);
+    font-family: var(--read-font); font-size: 17px; line-height: 1.9;
+    padding: 16px 18px calc(env(safe-area-inset-bottom) + 16px);
+  }
+  #editStatus { padding: 8px 16px calc(env(safe-area-inset-bottom) + 8px); font-size: 12px; color: var(--seal); min-height: 16px; background: var(--panel); }
+
+  /* ── 搜尋 ── */
+  #search { position: fixed; inset: 0; z-index: 45; display: none; flex-direction: column; background: var(--bg); }
+  #search.active { display: flex; }
+  #search .srch-bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: calc(env(safe-area-inset-top) + 10px) 12px 10px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  #search .srch-bar input {
+    flex: 1; padding: 11px 14px; font-size: 16px; background: var(--panel2);
+    border: 1px solid var(--line); border-radius: 10px; color: var(--txt); outline: none;
+  }
+  #search .srch-bar input:focus { border-color: var(--accent); }
+  #search .srch-filter { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--line); }
+  #search .srch-filter button {
+    flex: 1; padding: 8px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--panel2); color: var(--txt); font-size: 13px;
+  }
+  #search .srch-filter button.on { border-color: var(--accent); color: var(--accent); }
+  #search .srch-filter button:disabled { opacity: .35; }
+  #searchResults { flex: 1; overflow-y: auto; padding: 6px 0 calc(env(safe-area-inset-bottom) + 20px); }
+  #searchMeta { padding: 12px 16px; color: var(--sub); font-size: 12px; }
+  .sr-item { padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .sr-item:active { background: var(--panel2); }
+  .sr-src { color: var(--accent); font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 7px; }
+  .sr-src .sr-badge { background: var(--panel2); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; font-size: 10px; color: var(--sub); flex: none; }
+  .sr-snip { font-size: 14px; line-height: 1.7; color: var(--txt); }
+  .sr-snip mark, mark.sh { background: rgba(200,185,143,.28); color: var(--accent); border-radius: 3px; padding: 0 1px; }
+  mark.sh.cur { background: var(--accent); color: #1a1206; }
+  :root[data-theme="light"] mark.sh.cur { color: #fff8e7; }
+
+  /* 章內命中導航（搜尋跳轉後的浮條） */
+  #searchNav {
+    position: fixed; z-index: 22; right: 12px; top: calc(env(safe-area-inset-top) + 58px);
+    display: none; align-items: center; gap: 4px;
+    background: var(--panel); border: 1px solid var(--accent); border-radius: 999px;
+    padding: 4px 6px 4px 12px; box-shadow: 0 4px 16px rgba(0,0,0,.35);
+  }
+  #searchNav.active { display: flex; }
+  #searchNav .sn-info { font-size: 12px; color: var(--sub); font-variant-numeric: tabular-nums; margin-right: 4px; }
+  #searchNav button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel2); color: var(--txt); font-size: 15px; display: grid; place-items: center; }
+  #searchNav button:active { border-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- 密碼閘 -->
+<div id="gate" class="screen">
+  <div class="gate-box">
+    <div class="gate-mark">墨刃</div>
+    <div class="gate-sub">輸入密碼以解鎖書稿</div>
+    <input id="passInput" type="password" inputmode="text" autocomplete="off" placeholder="密碼" enterkeyhint="go">
+    <label class="gate-remember"><input id="rememberChk" type="checkbox" checked>在這台裝置記住密碼</label>
+    <button id="unlockBtn" class="btn-primary">解鎖</button>
+    <div id="gateErr" class="gate-err"></div>
+  </div>
+</div>
+
+<!-- 目錄 -->
+<div id="library" class="screen">
+  <div class="head">
+    <div class="head-row">
+      <h1>墨刃</h1>
+      <button class="icon-btn" id="refreshBtn" aria-label="重新整理">↻</button>
+    </div>
+    <div class="meta" id="libMeta"></div>
+  </div>
+  <div id="continueBox"></div>
+  <div id="libNav"></div>
+  <div style="height:24px"></div>
+</div>
+
+<!-- 閱讀 -->
+<div id="reader" class="screen">
+  <div class="progress" id="progressBar"></div>
+  <div class="topbar">
+    <button class="icon-btn" id="backBtn" aria-label="章節選單">☰</button>
+    <button class="icon-btn wide" id="homeBtn" aria-label="回書架">書架</button>
+    <button class="icon-btn wide" id="tocBtn" style="display:none">目錄</button>
+    <div class="title" id="readerTopTitle"></div>
+    <button class="icon-btn" id="searchBtn" aria-label="搜尋"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16.5" y2="16.5"></line></svg></button>
+    <button class="icon-btn" id="editBtn" aria-label="編輯">✎</button>
+    <button class="icon-btn" id="setBtn" aria-label="設定">Aa</button>
+  </div>
+  <div class="content" id="readerContent">
+    <div class="pageport" id="pagePort">
+      <div id="pageInner">
+        <div class="ch-title" id="chTitle"></div>
+        <div class="ch-vol" id="chVol"></div>
+        <div class="body" id="chBody"></div>
+      </div>
+    </div>
+  </div>
+  <div class="reader-nav">
+    <button id="prevBtn">← 上一章</button>
+    <button id="nextBtn">下一章 →</button>
+  </div>
+  <div id="pageIndicator"></div>
+</div>
+
+<!-- 設定面板 -->
+<div id="settings">
+  <div class="mask" id="setMask"></div>
+  <div class="sheet">
+    <h3>閱讀設定</h3>
+    <div class="set-row">
+      <span class="lbl">字級</span>
+      <div class="seg" id="segSize">
+        <button data-size="16">小</button>
+        <button data-size="19">中</button>
+        <button data-size="22">大</button>
+        <button data-size="26">特大</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <span class="lbl">字體</span>
+      <div class="seg" id="segFont">
+        <button data-font="serif">明體</button>
+        <button data-font="sans">黑體</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <span class="lbl">主題</span>
+      <div class="seg" id="segTheme">
+        <button data-theme="dark">深色</button>
+        <button data-theme="light">米黃</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <span class="lbl">翻頁</span>
+      <div class="seg" id="segMode">
+        <button data-mode="scroll">捲動</button>
+        <button data-mode="page">翻頁</button>
+      </div>
+    </div>
+    <div class="set-row">
+      <span class="lbl">動畫</span>
+      <div class="seg" id="segAnim">
+        <button data-anim="on">開</button>
+        <button data-anim="off">關</button>
+      </div>
+    </div>
+    <div class="set-row" style="flex-direction:column; align-items:stretch; gap:8px; border-top:1px solid var(--line); margin-top:6px; padding-top:14px;">
+      <span class="lbl" style="width:auto;">GitHub PAT（手機編輯回寫用）</span>
+      <input id="patInput" type="password" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="貼上 fine-grained PAT（只授權 noir-blade）"
+        style="width:100%; padding:11px 12px; font-size:13px; background:var(--panel2); border:1px solid var(--line); border-radius:10px; color:var(--txt); outline:none;">
+      <div style="display:flex; gap:8px;">
+        <button class="icon-btn wide" id="patSave" style="flex:1;">儲存</button>
+        <button class="icon-btn wide" id="patClear" style="flex:1;">清除</button>
+      </div>
+      <div id="patStatus" style="font-size:11px; color:var(--sub);"></div>
+    </div>
+    <div style="border-top:1px solid var(--line); margin-top:6px; padding-top:8px; display:flex; justify-content:space-between; align-items:center;">
+      <button class="set-link" id="forgetBtn">忘記密碼（登出）</button>
+      <button class="icon-btn wide" id="closeSetBtn">完成</button>
+    </div>
+    <div style="text-align:center; color:var(--sub); font-size:10px; margin-top:14px; letter-spacing:.5px;">墨刃閱讀器 · v13（2026.08.18 · 章級分片：開啟更快、編輯儲存快 30 倍）</div>
+  </div>
+</div>
+
+<!-- 段落選閱（設定文件目錄）-->
+<div id="toc">
+  <div class="mask" id="tocMask"></div>
+  <div class="sheet">
+    <h3>段落選閱</h3>
+    <div id="tocList"></div>
+  </div>
+</div>
+
+<!-- 左拉式章節抽屜 -->
+<div id="drawer">
+  <div class="mask" id="drawerMask"></div>
+  <div class="drawer-panel">
+    <div class="drawer-head">
+      <span class="dh-title">墨刃</span>
+      <button class="icon-btn wide" id="drawerClose">收合</button>
+    </div>
+    <div id="drawerNav"></div>
+  </div>
+</div>
+
+<!-- 編輯模式 -->
+<div id="editor">
+  <div class="ed-bar">
+    <button class="icon-btn wide" id="editCancel">取消</button>
+    <div class="ed-title" id="editTitle"></div>
+    <button class="icon-btn wide ed-save" id="editSave">儲存並推送</button>
+  </div>
+  <textarea id="editArea" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+  <div id="editStatus"></div>
+</div>
+
+<!-- 搜尋 -->
+<div id="search">
+  <div class="srch-bar">
+    <button class="icon-btn wide" id="searchCancel">取消</button>
+    <input id="searchInput" type="search" inputmode="search" autocomplete="off" autocapitalize="off" autocorrect="off" placeholder="搜尋關鍵字…" enterkeyhint="search">
+  </div>
+  <div class="srch-filter" id="searchFilter">
+    <button data-filter="all" class="on">全部</button>
+    <button data-filter="ch" id="sfChap">章節</button>
+    <button data-filter="set" id="sfSet">設定</button>
+    <button data-filter="alt" id="sfAlt">備選</button>
+  </div>
+  <div id="searchResults"></div>
+</div>
+
+<!-- 章內命中導航（搜尋跳轉後浮條）-->
+<div id="searchNav">
+  <span class="sn-info" id="searchNavInfo"></span>
+  <button id="hitPrev" aria-label="上一個命中">‹</button>
+  <button id="hitNext" aria-label="下一個命中">›</button>
+  <button id="hitClose" aria-label="關閉高亮">✕</button>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const LS = {
+  pass: 'moren_pass', last: 'moren_last', size: 'moren_size', font: 'moren_font',
+  theme: 'moren_theme', mode: 'moren_mode', anim: 'moren_anim', ghpat: 'moren_ghpat',
+};
+// GitHub 回寫目標（手機編輯 → commit 到這個 repo）
+const REPO = { owner: 'ming-c-tw', repo: 'noir-blade', branch: 'main' };
+const FONTS = {
+  serif: '"Noto Serif TC","Source Han Serif TC","Songti TC","STSong",serif',
+  sans: '-apple-system,"PingFang TC","Noto Sans TC","Helvetica Neue",sans-serif',
+};
+
+let KEY = null;          // 解出的 CryptoKey
+let KEY_RAW = null;      // 同一把金鑰的 raw bytes，只用來算內容指紋（見 shaOf）
+let INDEX = null;        // data/index.json
+let LIB = [];            // [{id,title,chapters:[…目錄項…]}]；章的正文按需載入後掛在 .body
+let FLAT = [];           // 扁平化章節；元素就是 LIB 裡那個物件本身（同一份參考，不是複本）
+// 正文快取：key = '章號:指紋' → 正文。指紋變了就是新 key，天然作廢，refresh 後只需重抓真的改過的章。
+const BODY_CACHE = new Map();
+let preloadPromise = null, preloadDone = false, preloadAt = 0;   // 背景預載（全文搜尋要吃全書正文）
+let SETTINGS = [];       // [{id,title,body}] 設定文件
+let ALTERNATES = [];     // [{n,title,body}] 備選版本
+let curType = 'ch';      // 目前閱讀類型：'ch' 章節 | 'set' 設定
+let curIdx = -1;         // 目前項目索引（對應 curType 的清單）
+let MODE = 'scroll';     // 閱讀模式：'scroll' 捲動 | 'page' 翻頁
+let ANIM = true;         // 翻頁是否帶滑動動畫
+let pageW = 0, pageCount = 1, curPage = 0;   // 翻頁模式狀態
+let curSections = [];    // 目前設定文件的段落（供段落選閱）
+let collapseState = {};   // 各區塊收合狀態（跨畫面保留），key: 'vol:xxx' | 'alt' | 'set'
+let collapseInit = false;
+// ── 搜尋狀態 ──
+let SFILTER = 'all';           // 篩選器：all 全部 | ch 章節 | set 設定 | alt 備選
+let searchHits = [];           // 當前章高亮的 <mark> 元素清單
+let searchHitIdx = -1;         // 當前聚焦第幾個命中
+const SEARCH_CAP = 300;        // 結果上限，避免搜常見字時癱瘓畫面
+
+// ── 工具 ──
+const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('active')); $('#' + id).classList.add('active'); window.scrollTo(0, 0); }
+function esc(s) { return s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+
+async function deriveKey(pass, kdf) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  // extractable=true：儲存時要算「金鑰＋明文」的 sha256 當內容指紋（與 build.mjs 同一套），
+  // 得把金鑰匯出成 raw bytes。金鑰本來就在同源記憶體裡（能解全書），可匯出不增加實質風險。
+  const k = await crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt: b64ToBuf(kdf.salt), iterations: kdf.iter, hash: kdf.hash },
+    base, { name: 'AES-GCM', length: 256 }, true, ['decrypt', 'encrypt']
+  );
+  KEY_RAW = new Uint8Array(await crypto.subtle.exportKey('raw', k));
+  return k;
+}
+
+// 內容指紋 sha256(金鑰 ‖ 明文)，必須與 build.mjs 的 emit() 算出同一個值：
+// 一致 → Mac 端下次打包看到指紋沒變就不會重推這章；不一致只會多推一次，不會壞資料。
+async function shaOf(str) {
+  const pt = new TextEncoder().encode(str);
+  const buf = new Uint8Array(KEY_RAW.length + pt.length);
+  buf.set(KEY_RAW, 0); buf.set(pt, KEY_RAW.length);
+  const d = await crypto.subtle.digest('SHA-256', buf);
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function decJSON(key, obj) {
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64ToBuf(obj.iv) }, key, b64ToBuf(obj.ct));
+  return new TextDecoder().decode(pt);
+}
+
+// ── 加密（對稱於 decJSON；手機編輯後把該檔重新打包，與 build.mjs 格式一致）──
+function bufToB64(buf) {
+  const bytes = new Uint8Array(buf); let bin = '';
+  const CH = 0x8000;   // 分段避免 fromCharCode 參數過多爆堆疊
+  for (let i = 0; i < bytes.length; i += CH) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  return btoa(bin);
+}
+async function encJSON(key, str) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(str));
+  return { iv: bufToB64(iv), ct: bufToB64(ct) };   // ct 尾端自帶 16-byte tag，與 build.mjs / pull.mjs 對應
+}
+
+// ── GitHub 寫回（fine-grained PAT；原子 commit：blobs → tree → commit → 更新 ref）──
+function ghToken() { return localStorage.getItem(LS.ghpat) || ''; }
+async function gh(path, opts = {}) {
+  const res = await fetch('https://api.github.com/repos/' + REPO.owner + '/' + REPO.repo + path, {
+    method: opts.method || 'GET',
+    headers: { Authorization: 'Bearer ' + ghToken(), Accept: 'application/vnd.github+json', 'Content-Type': 'application/json' },
+    body: opts.body,
+  });
+  if (!res.ok) throw new Error('GitHub ' + res.status + '：' + (await res.text()).slice(0, 160));
+  return res.json();
+}
+async function ghCommit(files, message) {
+  const ref = await gh('/git/ref/heads/' + REPO.branch);
+  const baseSha = ref.object.sha;
+  const baseCommit = await gh('/git/commits/' + baseSha);
+  // 內容直接掛在 tree item 上（GitHub 會自動建 blob）→ 每個檔省一次 API 往返。
+  // 手機上一次儲存的往返數：ref → commit → tree → commit → patch ref，共 5 次（原本 5＋檔案數）。
+  const treeItems = files.map((f) => ({ path: f.path, mode: '100644', type: 'blob', content: f.content }));
+  const tree = await gh('/git/trees', { method: 'POST', body: JSON.stringify({ base_tree: baseCommit.tree.sha, tree: treeItems }) });
+  const commit = await gh('/git/commits', { method: 'POST', body: JSON.stringify({ message, tree: tree.sha, parents: [baseSha] }) });
+  await gh('/git/refs/heads/' + REPO.branch, { method: 'PATCH', body: JSON.stringify({ sha: commit.sha }) });
+  return commit.sha;
+}
+
+// ── 編輯模式 ──
+let editOrig = '';
+// 依目前閱讀類型，回傳「怎麼讀/寫這段 body、以及儲存時要重打包哪個檔」
+function currentEditable() {
+  if (curType === 'ch') {
+    const ch = FLAT[curIdx];                                  // 就是 LIB 裡那個章物件本身
+    const vol = LIB.find((v) => v.id === ch.volId);
+    const volEntry = INDEX.volumes.find((x) => x.id === ch.volId);
+    const prev = { chSha: ch.sha, volSha: volEntry.sha };      // 推送失敗要能還原（指紋錯掉會讓之後讀這章 404）
+    return {
+      label: `第 ${String(ch.n).padStart(4, '0')} 章　${ch.title}`,
+      getBody: () => ch.body,
+      setBody: (b) => { ch.body = b; },
+      rollback: () => { ch.sha = prev.chSha; volEntry.sha = prev.volSha; },
+      // ⭐v2：只重打包「這一章（約 15KB）＋這一卷的目錄（約 14KB）」，不再是整卷 1.07MB
+      buildFiles: async () => {
+        // ⚠️ 鍵的順序必須與 build.mjs 完全一致，否則算出的指紋對不上（後果是 Mac 端下次多推這章一次）
+        const plain = JSON.stringify({ n: ch.n, title: ch.title, body: ch.body, mature: ch.mature });
+        ch.sha = await shaOf(plain);
+        BODY_CACHE.set(ch.n + ':' + ch.sha, ch.body);
+        const manifest = JSON.stringify({
+          id: vol.id, title: vol.title,
+          chapters: vol.chapters.map((c) => ({ n: c.n, title: c.title, mature: c.mature, file: c.file, sha: c.sha })),
+        });
+        volEntry.sha = await shaOf(manifest);
+        volEntry.chapters = vol.chapters.length;
+        return [
+          { path: 'data/' + ch.file, content: JSON.stringify(await encJSON(KEY, plain)) },
+          { path: 'data/' + volEntry.file, content: JSON.stringify(await encJSON(KEY, manifest)) },
+        ];
+      },
+    };
+  }
+  if (curType === 'alt') {
+    const it = ALTERNATES[curIdx];
+    const entry = INDEX.alternates;
+    const prevSha = entry.sha;
+    return {
+      label: it.title,
+      getBody: () => it.body,
+      setBody: (b) => { it.body = b; },
+      rollback: () => { entry.sha = prevSha; },
+      buildFiles: async () => {
+        const plain = JSON.stringify({ chapters: ALTERNATES });
+        entry.sha = await shaOf(plain);
+        return [{ path: 'data/' + entry.file, content: JSON.stringify(await encJSON(KEY, plain)) }];
+      },
+    };
+  }
+  const it = SETTINGS[curIdx];   // 'set'
+  const entry = INDEX.settings;
+  const prevSetSha = entry.sha;
+  return {
+    label: it.title,
+    getBody: () => it.body,
+    setBody: (b) => { it.body = b; },
+    rollback: () => { entry.sha = prevSetSha; },
+    buildFiles: async () => {
+      const plain = JSON.stringify({ docs: SETTINGS });
+      entry.sha = await shaOf(plain);
+      return [{ path: 'data/' + entry.file, content: JSON.stringify(await encJSON(KEY, plain)) }];
+    },
+  };
+}
+function openEditor() {
+  if (curIdx < 0) return;
+  if (!ghToken()) { alert('請先到「設定 Aa」最下方貼上 GitHub PAT，才能把編輯推回線上。'); return; }
+  const ed = currentEditable();
+  editOrig = ed.getBody();
+  $('#editTitle').textContent = ed.label;
+  $('#editArea').value = editOrig;
+  $('#editStatus').textContent = '';
+  $('#editor').classList.add('active');
+}
+function closeEditor() { $('#editor').classList.remove('active'); }
+async function saveEdit() {
+  const ed = currentEditable();
+  const newBody = $('#editArea').value;
+  if (newBody === editOrig) { closeEditor(); return; }   // 沒改就直接關
+  const btn = $('#editSave');
+  const prevUpdated = INDEX.updated;
+  btn.disabled = true; $('#editStatus').textContent = '加密並推送中…（首次可能要幾秒）';
+  ed.setBody(newBody);
+  INDEX.updated = new Date().toISOString();
+  try {
+    const files = await ed.buildFiles();
+    files.push({ path: 'data/index.json', content: JSON.stringify(INDEX) });
+    await ghCommit(files, '手機編輯：' + ed.label);
+    closeEditor();
+    openItem(curType, curIdx, curType === 'ch');   // 以新內容重繪
+    if ($('#library').classList.contains('active')) renderLibrary();
+  } catch (e) {
+    ed.setBody(editOrig); INDEX.updated = prevUpdated;   // 失敗 → 記憶體回滾
+    if (ed.rollback) ed.rollback();                      // 指紋也要還原，否則之後讀這章會帶著錯的 ?v= 抓不到檔
+    $('#editStatus').textContent = '✗ 推送失敗：' + e.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+function updatePatStatus() {
+  const el = $('#patStatus'); if (!el) return;
+  el.textContent = ghToken() ? '✓ 已儲存 PAT（閱讀頁的 ✎ 可推送）' : '尚未設定；設定後閱讀頁 ✎ 才能推送。';
+}
+
+async function loadIndex() {
+  const res = await fetch('data/index.json', { cache: 'no-cache' });
+  if (!res.ok) throw new Error('index');
+  return res.json();
+}
+
+// ── 章節正文：按需載入（v2 章級分片）────────────────────────────────
+// 每章各自是 data/ch/NNNN.json。URL 帶上 ?v=<指紋前 12 碼>：
+// 內容沒改 → URL 不變 → 直接吃瀏覽器／Service Worker 快取，完全不用重新下載；
+// 改過 → 指紋變 → URL 變 → 自然抓到新的（不必跟 CDN 的 max-age 搏鬥）。
+async function fetchChapterBody(entry) {
+  const ck = entry.n + ':' + entry.sha;
+  if (BODY_CACHE.has(ck)) return BODY_CACHE.get(ck);
+  const res = await fetch('data/' + entry.file + '?v=' + entry.sha.slice(0, 12), { cache: 'force-cache' });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = JSON.parse(await decJSON(KEY, await res.json()));
+  BODY_CACHE.set(ck, data.body);
+  return data.body;
+}
+// 確保這章的正文已在記憶體（重複呼叫安全；同一章併發呼叫共用同一個 promise）
+const inflight = new Map();
+async function ensureChapter(entry) {
+  if (entry.body != null) return entry.body;
+  const ck = entry.n + ':' + entry.sha;
+  if (!inflight.has(ck)) inflight.set(ck, fetchChapterBody(entry).finally(() => inflight.delete(ck)));
+  entry.body = await inflight.get(ck);
+  return entry.body;
+}
+// 背景預載全書正文：開 App 不必等它（目錄已經夠畫書架），但全文搜尋要吃全書，
+// 所以解鎖後就默默在背景抓完。第二次之後幾乎全部命中快取、不耗流量。
+function startPreload() {
+  if (preloadPromise) return preloadPromise;
+  const CONC = 6;   // 併發度：手機上開太多連線反而互相排隊
+  preloadPromise = (async () => {
+    const todo = FLAT.filter((c) => c.body == null);
+    let i = 0;
+    await Promise.all(Array.from({ length: Math.min(CONC, todo.length) }, async () => {
+      while (i < todo.length) {
+        const c = todo[i++];
+        try { await ensureChapter(c); } catch { /* 單章失敗不擋整批；搜尋時該章就是搜不到 */ }
+        preloadAt++;
+        updatePreloadHint();
+      }
+    }));
+    preloadDone = true;
+    updatePreloadHint();
+  })();
+  return preloadPromise;
+}
+function preloadProgress() { return { done: FLAT.filter((c) => c.body != null).length, total: FLAT.length }; }
+
+// 用目前 KEY 載入「目錄」（章節正文不在裡面，見 ensureChapter）
+async function loadContent() {
+  LIB = [];
+  for (const v of INDEX.volumes) {
+    const res = await fetch('data/' + v.file, { cache: 'no-cache' });
+    const obj = await res.json();
+    LIB.push(JSON.parse(await decJSON(KEY, obj)));
+  }
+  FLAT = [];
+  // ⚠️ FLAT 直接放 LIB 裡那個章物件本身（不複製）—— 正文只存一份，編輯後不必兩邊同步
+  LIB.forEach((v) => v.chapters.forEach((c) => {
+    c.volId = v.id; c.volTitle = v.title; c.idx = FLAT.length;
+    if (c.sha && BODY_CACHE.has(c.n + ':' + c.sha)) c.body = BODY_CACHE.get(c.n + ':' + c.sha);   // 指紋沒變 → 沿用已載入的正文
+    FLAT.push(c);
+  }));
+  // 重新整理過後預載狀態要重來（可能有新章或改過的章）
+  preloadPromise = null; preloadDone = false; preloadAt = 0;
+  // 備選版本
+  ALTERNATES = [];
+  if (INDEX.alternates && INDEX.alternates.file) {
+    const res = await fetch('data/' + INDEX.alternates.file, { cache: 'no-cache' });
+    const obj = await res.json();
+    ALTERNATES = JSON.parse(await decJSON(KEY, obj)).chapters || [];
+  }
+  // 設定文件
+  SETTINGS = [];
+  if (INDEX.settings && INDEX.settings.file) {
+    const res = await fetch('data/' + INDEX.settings.file, { cache: 'no-cache' });
+    const obj = await res.json();
+    SETTINGS = JSON.parse(await decJSON(KEY, obj)).docs || [];
+  }
+}
+
+// 用密碼嘗試解鎖：驗證 check → 解出全部卷
+async function unlock(pass) {
+  const key = await deriveKey(pass, INDEX.kdf);
+  const check = await decJSON(key, INDEX.check);   // 錯密碼會在此丟 GCM 驗證錯誤
+  if (check !== 'moren-ok') throw new Error('bad');
+  KEY = key;
+  await loadContent();
+}
+
+// 重新整理：重抓線上最新書稿並重繪當前畫面（本地推完，手機不必關掉 App 重開）
+async function refreshContent() {
+  const btn = $('#refreshBtn');
+  if (btn.disabled) return;
+  btn.disabled = true; btn.classList.add('refreshing');
+  const savedType = curType, savedIdx = curIdx, wasReading = $('#reader').classList.contains('active');
+  try {
+    INDEX = await loadIndex();
+    const pass = localStorage.getItem(LS.pass);
+    if (pass) KEY = await deriveKey(pass, INDEX.kdf);   // 重新打包後 kdf salt 可能改變，重新 derive 最穩
+    await loadContent();                                 // 沒存密碼則沿用記憶體中的 KEY
+    if (wasReading && savedIdx >= 0 && listOf(savedType)[savedIdx]) {
+      openItem(savedType, savedIdx, true);               // 停在原本這章、沿用閱讀進度
+    } else {
+      renderLibrary(); show('library');
+    }
+    startPreload();   // 指紋沒變的章會直接命中快取，只有真的改過的才重抓
+  } catch (e) {
+    alert('重新整理失敗：' + (e.message || e) + '\n若持續失敗，請到設定登出後重新輸入密碼。');
+  } finally {
+    btn.classList.remove('refreshing'); btn.disabled = false;
+  }
+}
+
+// ── 密碼閘 ──
+async function doUnlock(pass, remember) {
+  $('#gateErr').textContent = '';
+  $('#unlockBtn').disabled = true; $('#unlockBtn').textContent = '解鎖中…';
+  try {
+    await unlock(pass);
+    if (remember) localStorage.setItem(LS.pass, pass); else localStorage.removeItem(LS.pass);
+    renderLibrary();
+    show('library');
+    startPreload();   // 書架已經畫得出來（只靠目錄）；正文在背景慢慢抓，供搜尋與離線閱讀
+  } catch (e) {
+    localStorage.removeItem(LS.pass);
+    $('#gateErr').textContent = '密碼錯誤，或內容尚未同步。';
+    $('#passInput').value = '';
+  } finally {
+    $('#unlockBtn').disabled = false; $('#unlockBtn').textContent = '解鎖';
+  }
+}
+
+// ── 目錄／導覽 ──
+// 只在第一次設定收合預設（展開最後一卷、其餘收合）；之後一律沿用使用者當下的收合狀態
+function ensureCollapseDefaults() {
+  if (collapseInit) return;
+  LIB.forEach((v, i) => { if (collapseState['vol:' + v.id] === undefined) collapseState['vol:' + v.id] = i < LIB.length - 1; });
+  if (collapseState.alt === undefined) collapseState.alt = true;
+  if (collapseState.set === undefined) collapseState.set = true;
+  collapseInit = true;
+}
+
+// 建一個可收合區塊（卷／備選／設定共用）；收合狀態存 collapseState[key]，跨畫面／回書架都保留
+function makeBlock(key, title, countText, items, activeKey) {
+  const vol = document.createElement('div');
+  if (collapseState[key] === undefined) collapseState[key] = true;
+  vol.className = 'vol' + (collapseState[key] ? ' collapsed' : '');
+  const chs = items.map((it) =>
+    `<div class="ch${it.key === activeKey ? ' reading' : ''}" data-key="${it.key}">
+       <span class="num">${it.num}</span><span class="t">${esc(it.title)}${it.mature ? ' <span class="tag18">18+</span>' : ''}</span></div>`).join('');
+  vol.innerHTML = `<div class="vol-h"><span>${esc(title)}</span><span class="count">${countText}</span><span class="caret">▾</span></div>
+    <div class="ch-list">${chs}</div>`;
+  vol.querySelector('.vol-h').onclick = () => { collapseState[key] = !collapseState[key]; vol.classList.toggle('collapsed'); };
+  vol.querySelectorAll('.ch').forEach((el) => { const it = items.find((x) => x.key === el.dataset.key); el.onclick = it.onClick; });
+  return vol;
+}
+
+// 把「卷→章 / 備選 / 設定」建進 container；onPick(type, idx) 為點選時行為（書架與抽屜共用）
+function renderNav(container, opts) {
+  opts = opts || {};
+  ensureCollapseDefaults();
+  container.innerHTML = '';
+  LIB.forEach((v) => {
+    const items = v.chapters.map((c) => {
+      const fi = FLAT.find((f) => f.volId === v.id && f.n === c.n);
+      return { key: 'ch:' + fi.idx, num: String(c.n).padStart(4, '0'), title: c.title, mature: c.mature, onClick: () => opts.onPick('ch', fi.idx) };
+    });
+    container.appendChild(makeBlock('vol:' + v.id, v.title, v.chapters.length + ' 章', items, opts.activeKey));
+  });
+  if (ALTERNATES.length) {
+    const items = ALTERNATES.map((d, i) => ({ key: 'alt:' + i, num: '✎', title: d.title, mature: d.mature, onClick: () => opts.onPick('alt', i) }));
+    container.appendChild(makeBlock('alt', '備選版本', ALTERNATES.length + ' 篇', items, opts.activeKey));
+  }
+  if (SETTINGS.length) {
+    const items = SETTINGS.map((d, i) => ({ key: 'set:' + i, num: '◆', title: d.title, onClick: () => opts.onPick('set', i) }));
+    container.appendChild(makeBlock('set', '設定資料', SETTINGS.length + ' 份', items, opts.activeKey));
+  }
+}
+
+function renderLibrary() {
+  const d = INDEX.updated ? new Date(INDEX.updated) : null;
+  const p2 = (n) => String(n).padStart(2, '0');
+  const stamp = d ? ` · 更新於 ${d.getFullYear()}/${p2(d.getMonth()+1)}/${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}` : '';
+  $('#libMeta').textContent = `共 ${LIB.length} 卷 · ${FLAT.length} 章` + stamp;
+  const last = getLast();
+  const box = $('#continueBox');
+  if (last && FLAT[last.idx]) {
+    const c = FLAT[last.idx];
+    box.innerHTML = `<div class="continue" id="continueBtn">
+      <div><div class="c-label">繼續閱讀</div><div class="c-title">${esc(c.title)}</div></div>
+      <div class="c-go">›</div></div>`;
+    $('#continueBtn').onclick = () => openItem('ch', last.idx, true);
+  } else box.innerHTML = '';
+  renderNav($('#libNav'), { activeKey: last ? 'ch:' + last.idx : null, onPick: (t, i) => openItem(t, i, true) });
+}
+
+// ── 左拉式章節抽屜（閱讀中快速切章，不必回書架）──
+function openDrawer() {
+  renderNav($('#drawerNav'), {
+    activeKey: (curType && curIdx >= 0) ? curType + ':' + curIdx : null,
+    onPick: (t, i) => { closeDrawer(); openItem(t, i, true); },
+  });
+  $('#drawer').classList.add('active');
+}
+function closeDrawer() { $('#drawer').classList.remove('active'); }
+
+// ── 章節正文（散文）渲染 ──
+function renderBody(text) {
+  const parts = text.split(/\n\s*\n/);
+  return parts.map((p) => {
+    const t = p.trim();
+    if (/^(-{3,}|\*{3,}|＊+|◇+|◆+|※+|·{3,})$/.test(t)) return '<div class="divider">◇ ◇ ◇</div>';
+    return '<p>' + esc(t).replace(/\n/g, '<br>') + '</p>';
+  }).join('');
+}
+
+// ── 設定文件（Markdown）渲染 ──
+function inlineMd(s) {
+  return esc(s)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
+}
+function mdToHtml(text) {
+  const lines = text.split(/\r?\n/);
+  let html = '', i = 0;
+  let listType = null;               // 'ul' | 'ol'
+  const closeList = () => { if (listType) { html += `</${listType}>`; listType = null; } };
+  while (i < lines.length) {
+    const line = lines[i];
+    const t = line.trim();
+    // 表格
+    if (/^\|.*\|$/.test(t) && i + 1 < lines.length && /^\|[\s:\-|]+\|$/.test(lines[i + 1].trim())) {
+      closeList();
+      const cells = (r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      const head = cells(t);
+      i += 2;
+      let cards = '<div class="tbl-cards">';
+      while (i < lines.length && /^\|.*\|$/.test(lines[i].trim())) {
+        const row = cells(lines[i]); i++;
+        cards += '<div class="trow">';
+        cards += `<div class="trow-h">${inlineMd(row[0] || '')}</div>`;          // 首欄當卡片標題
+        for (let ci = 1; ci < head.length; ci++) {
+          const v = row[ci] || '';
+          if (!v) continue;
+          const k = head[ci] ? `<span class="tk">${inlineMd(head[ci])}：</span>` : '';
+          cards += `<div class="tcell">${k}${inlineMd(v)}</div>`;
+        }
+        cards += '</div>';
+      }
+      cards += '</div>';
+      html += cards;
+      continue;
+    }
+    if (!t) { closeList(); i++; continue; }
+    let m;
+    if (m = t.match(/^(#{1,6})\s+(.*)$/)) { closeList(); const lv = Math.min(m[1].length, 4); html += `<h${lv}>${inlineMd(m[2])}</h${lv}>`; i++; continue; }
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(t)) { closeList(); html += '<hr>'; i++; continue; }
+    if (m = t.match(/^>\s?(.*)$/)) { closeList(); html += `<blockquote><p>${inlineMd(m[1])}</p></blockquote>`; i++; continue; }
+    if (m = t.match(/^[-*]\s+(.*)$/)) { if (listType !== 'ul') { closeList(); html += '<ul>'; listType = 'ul'; } html += `<li>${inlineMd(m[1])}</li>`; i++; continue; }
+    if (m = t.match(/^\d+\.\s+(.*)$/)) { if (listType !== 'ol') { closeList(); html += '<ol>'; listType = 'ol'; } html += `<li>${inlineMd(m[1])}</li>`; i++; continue; }
+    closeList(); html += `<p>${inlineMd(t)}</p>`; i++;
+  }
+  closeList();
+  return html;
+}
+
+// ── 通用開啟（章節 / 備選 / 設定）──
+function isPaged() { return MODE === 'page'; }
+function listOf(type) { return type === 'set' ? SETTINGS : type === 'alt' ? ALTERNATES : FLAT; }
+
+function openItem(type, idx, save, startPage) {
+  const list = listOf(type);
+  const it = list[idx];
+  if (!it) return;
+  // v2 章級分片：正文按需載入。還沒到手就先補載，再原封不動走下面的同步流程
+  //（不把整個 openItem 改成 async —— 翻頁量測與進度還原都吃同步時序）
+  if (type === 'ch' && it.body == null) {
+    curType = type; curIdx = idx;
+    $('#chTitle').textContent = `第 ${String(it.n).padStart(4, '0')} 章　${it.title}`;
+    $('#chVol').textContent = it.volTitle;
+    $('#chBody').className = 'body';
+    $('#chBody').innerHTML = '<p style="color:var(--sub);text-indent:0">載入中…</p>';
+    show('reader');
+    ensureChapter(it).then(
+      () => openItem(type, idx, save, startPage),
+      (e) => { $('#chBody').innerHTML = '<p style="color:var(--sub);text-indent:0">✗ 這章載入失敗（' + esc(String(e.message || e)) + '）。<br>檢查網路後按上方「↻」重新整理。</p>'; }
+    );
+    return;
+  }
+  curType = type; curIdx = idx;
+  searchHits = []; searchHitIdx = -1; $('#searchNav').classList.remove('active');   // 換頁先清掉上一次的搜尋高亮狀態
+  const body = $('#chBody');
+  if (type === 'ch') {
+    $('#chTitle').textContent = `第 ${String(it.n).padStart(4, '0')} 章　${it.title}`;
+    $('#chVol').textContent = it.volTitle;
+    body.className = 'body';
+    body.innerHTML = renderBody(it.body);
+  } else if (type === 'alt') {
+    $('#chTitle').textContent = it.title;
+    $('#chVol').textContent = '備選版本';
+    body.className = 'body';
+    body.innerHTML = it.body.trim() ? renderBody(it.body) : '<p style="color:var(--sub);text-indent:0">（這篇備選稿目前還是空的）</p>';
+  } else {
+    $('#chTitle').textContent = it.title;
+    $('#chVol').textContent = '設定資料';
+    body.className = 'md';
+    body.innerHTML = mdToHtml(it.body);
+  }
+  if (it.mature) $('#chVol').innerHTML += ' <span class="tag18">18+</span>';
+  $('#readerTopTitle').textContent = it.title;
+  $('#prevBtn').disabled = idx <= 0;
+  $('#nextBtn').disabled = idx >= list.length - 1;
+  const lbl = type === 'set' ? ['← 上一份', '下一份 →'] : type === 'alt' ? ['← 上一篇', '下一篇 →'] : ['← 上一章', '下一章 →'];
+  $('#prevBtn').textContent = lbl[0]; $('#nextBtn').textContent = lbl[1];
+  if (type === 'set') { buildToc(); $('#tocBtn').style.display = curSections.length ? '' : 'none'; }
+  else { curSections = []; $('#tocBtn').style.display = 'none'; }
+  show('reader');
+  const last = getLast();
+  const savedRatio = (type === 'ch' && save && last && last.idx === idx) ? (last.ratio || 0) : 0;
+  if (isPaged()) {
+    curPage = 0;
+    requestAnimationFrame(() => {
+      measurePaged();
+      let k = 0;
+      if (startPage === 'first') k = 0;
+      else if (startPage === 'last') k = pageCount - 1;
+      else if (typeof startPage === 'number') k = startPage;
+      else if (savedRatio) k = Math.round(savedRatio * (pageCount - 1));
+      gotoPage(k, false);
+    });
+  } else {
+    requestAnimationFrame(() => {
+      const target = savedRatio * (document.documentElement.scrollHeight - window.innerHeight);
+      window.scrollTo(0, savedRatio ? target : 0);
+      updateProgress();
+    });
+    if (type === 'ch') setLast(idx, savedRatio);
+  }
+}
+
+// ── 翻頁模式：量測與翻頁 ──
+function measurePaged() {
+  const content = $('#readerContent'), port = $('#pagePort'), inner = $('#pageInner');
+  const topBottom = document.querySelector('#reader .topbar').getBoundingClientRect().bottom;
+  content.style.top = topBottom + 'px';
+  const SIDE = 24;
+  const W = Math.min(window.innerWidth - SIDE * 2, 760 - SIDE * 2);
+  const H = Math.max(200, window.innerHeight - topBottom - 30);
+  port.style.width = W + 'px'; port.style.height = H + 'px';
+  inner.style.width = W + 'px'; inner.style.height = H + 'px';
+  inner.style.columnWidth = W + 'px'; inner.style.columnGap = '0px';
+  inner.style.transition = 'none'; inner.style.transform = 'translateX(0)';
+  pageW = W;
+  const total = inner.scrollWidth;                 // 讀取即強制回流，量到正確總寬
+  pageCount = Math.max(1, Math.round(total / W));
+  if (curPage >= pageCount) curPage = pageCount - 1;
+  if (curPage < 0) curPage = 0;
+  requestAnimationFrame(() => { inner.style.transition = ANIM ? 'transform .2s ease' : 'none'; });
+}
+function gotoPage(k, silent) {
+  curPage = Math.max(0, Math.min(pageCount - 1, k));
+  $('#pageInner').style.transform = 'translateX(' + (-curPage * pageW) + 'px)';
+  $('#pageIndicator').textContent = (curPage + 1) + ' / ' + pageCount;
+  const ratio = pageCount > 1 ? curPage / (pageCount - 1) : 0;
+  $('#progressBar').style.width = (ratio * 100) + '%';
+  if (!silent && curType === 'ch') setLast(curIdx, ratio);
+}
+function nextPage() {
+  if (curPage < pageCount - 1) return gotoPage(curPage + 1);
+  if (curIdx < listOf(curType).length - 1) openItem(curType, curIdx + 1, false, 'first');   // 翻到下一項第一頁
+}
+function prevPage() {
+  if (curPage > 0) return gotoPage(curPage - 1);
+  if (curIdx > 0) openItem(curType, curIdx - 1, false, 'last');                   // 翻到上一章/份最後一頁
+}
+function clearPagedStyles() {
+  ['#readerContent', '#pagePort', '#pageInner'].forEach((s) => { const el = $(s); if (el) el.removeAttribute('style'); });
+}
+function applyMode() {
+  const reader = $('#reader');
+  if (MODE === 'page') reader.classList.add('paged');
+  else { reader.classList.remove('paged'); clearPagedStyles(); }
+}
+function repaginate() {
+  if (isPaged() && $('#reader').classList.contains('active')) {
+    requestAnimationFrame(() => { measurePaged(); gotoPage(curPage, true); });
+  }
+}
+
+// ── 段落選閱（設定文件目錄）──
+function buildToc() {
+  const hs = [...$('#chBody').querySelectorAll('h2, h3')];
+  curSections = hs.map((el, i) => { el.dataset.sec = i; return { i, text: el.textContent, level: +el.tagName[1] }; });
+}
+function openToc() {
+  const list = $('#tocList'); list.innerHTML = '';
+  curSections.forEach((s) => {
+    const d = document.createElement('div');
+    d.className = 'toc-item lv' + s.level;
+    d.textContent = s.text;
+    d.onclick = () => { $('#toc').classList.remove('active'); jumpToSection(s.i); };
+    list.appendChild(d);
+  });
+  $('#toc').classList.add('active');
+}
+// 找出某元素在翻頁模式下位於第幾頁
+function pageOfElement(el) {
+  const inner = $('#pageInner');
+  const prevT = inner.style.transition, prevX = inner.style.transform;
+  inner.style.transition = 'none'; inner.style.transform = 'translateX(0)';
+  const x = el.getBoundingClientRect().left - inner.getBoundingClientRect().left;
+  inner.style.transform = prevX; inner.style.transition = prevT;
+  return Math.round(x / pageW);
+}
+function jumpToSection(i) {
+  const el = $('#chBody').querySelector('[data-sec="' + i + '"]');
+  if (!el) return;
+  if (isPaged()) { measurePaged(); gotoPage(pageOfElement(el), false); }
+  else { window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 72, behavior: 'smooth' }); }
+}
+function updateProgress() {
+  const h = document.documentElement.scrollHeight - window.innerHeight;
+  const r = h > 0 ? Math.min(1, window.scrollY / h) : 0;
+  $('#progressBar').style.width = (r * 100) + '%';
+  return r;
+}
+
+// ── 進度記憶 ──
+function getLast() { try { return JSON.parse(localStorage.getItem(LS.last)); } catch { return null; } }
+function setLast(idx, ratio) { localStorage.setItem(LS.last, JSON.stringify({ idx, ratio })); }
+
+let scrollT = null;
+window.addEventListener('scroll', () => {
+  if (!$('#reader').classList.contains('active')) return;
+  const r = updateProgress();
+  clearTimeout(scrollT);
+  scrollT = setTimeout(() => { if (curType === 'ch' && curIdx >= 0) setLast(curIdx, r); }, 250);
+}, { passive: true });
+
+// ── 設定 ──
+function applyPrefs() {
+  const size = localStorage.getItem(LS.size) || '19';
+  const font = localStorage.getItem(LS.font) || 'serif';
+  const theme = localStorage.getItem(LS.theme) || 'dark';
+  MODE = localStorage.getItem(LS.mode) || 'scroll';
+  ANIM = localStorage.getItem(LS.anim) !== 'off';   // 預設開
+  document.documentElement.style.setProperty('--read-size', size + 'px');
+  document.documentElement.style.setProperty('--read-font', FONTS[font]);
+  document.documentElement.setAttribute('data-theme', theme);
+  document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'light' ? '#f3ead6' : '#0f1115');
+  $('#segSize').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.size === size));
+  $('#segFont').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.font === font));
+  $('#segTheme').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.theme === theme));
+  $('#segMode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.mode === MODE));
+  $('#segAnim').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.anim === (ANIM ? 'on' : 'off')));
+  applyMode();
+  if (isPaged()) $('#pageInner').style.transition = ANIM ? 'transform .2s ease' : 'none';
+}
+
+// ── 搜尋（全文，含篩選器）──
+function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
+
+// 依篩選器組出要搜的來源清單
+function searchSources() {
+  const out = [];
+  if (SFILTER === 'all' || SFILTER === 'ch')
+    FLAT.forEach((c, i) => out.push({ type: 'ch', idx: i, badge: c.volTitle, title: `第 ${String(c.n).padStart(4, '0')} 章　${c.title}`, body: c.body || '' }));
+  if (SFILTER === 'all' || SFILTER === 'set')
+    SETTINGS.forEach((d, i) => out.push({ type: 'set', idx: i, badge: '設定', title: d.title, body: d.body || '' }));
+  if (SFILTER === 'all' || SFILTER === 'alt')
+    ALTERNATES.forEach((d, i) => out.push({ type: 'alt', idx: i, badge: '備選', title: d.title, body: d.body || '' }));
+  return out;
+}
+
+// 預載進度提示：只在搜尋畫面正顯示「載入中」訊息時更新數字，不打擾其他畫面
+function updatePreloadHint() {
+  const meta = document.querySelector('#searchResults #searchMeta');
+  if (!meta || !meta.textContent.startsWith('正在載入全書內容')) return;
+  const p = preloadProgress();
+  meta.textContent = `正在載入全書內容供搜尋…（${p.done}／${p.total} 章）`;
+}
+
+function openSearch() {
+  // 空的類別禁用；若目前篩選正指向空類別，退回「全部」
+  $('#sfSet').disabled = !SETTINGS.length;
+  $('#sfAlt').disabled = !ALTERNATES.length;
+  if ((SFILTER === 'set' && !SETTINGS.length) || (SFILTER === 'alt' && !ALTERNATES.length)) SFILTER = 'all';
+  $('#searchFilter').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.filter === SFILTER));
+  $('#search').classList.add('active');
+  const inp = $('#searchInput');
+  setTimeout(() => inp.focus(), 60);
+  if (inp.value.trim()) doSearch(); else $('#searchResults').innerHTML = '<div id="searchMeta">輸入關鍵字開始搜尋。</div>';
+}
+function closeSearch() { $('#search').classList.remove('active'); }
+
+async function doSearch() {
+  const kw = $('#searchInput').value.trim();
+  const box = $('#searchResults');
+  if (!kw) { box.innerHTML = '<div id="searchMeta">輸入關鍵字開始搜尋。</div>'; return; }
+  // 全文搜尋要吃全書正文；章級分片後正文是背景預載的，還沒載完就先等它
+  if (!preloadDone && (SFILTER === 'all' || SFILTER === 'ch')) {
+    const p = preloadProgress();
+    box.innerHTML = `<div id="searchMeta">正在載入全書內容供搜尋…（${p.done}／${p.total} 章）</div>`;
+    await startPreload();
+    if ($('#searchInput').value.trim() !== kw) return;   // 等待期間關鍵字又改了 → 交給後來那次
+  }
+  const lower = kw.toLowerCase();
+  const results = []; let total = 0, capped = false;
+  for (const src of searchSources()) {
+    const lt = src.body.toLowerCase();
+    let pos = lt.indexOf(lower), occ = 0;
+    while (pos !== -1) {
+      total++;
+      if (results.length < SEARCH_CAP) {
+        const s = Math.max(0, pos - 18), e = Math.min(src.body.length, pos + kw.length + 24);
+        const pre = (s > 0 ? '…' : '') + src.body.slice(s, pos);
+        const hit = src.body.slice(pos, pos + kw.length);
+        const post = src.body.slice(pos + kw.length, e) + (e < src.body.length ? '…' : '');
+        results.push({ type: src.type, idx: src.idx, occ, badge: src.badge, title: src.title,
+          snippet: esc(pre.replace(/\s+/g, ' ')) + '<mark>' + esc(hit) + '</mark>' + esc(post.replace(/\s+/g, ' ')) });
+      } else capped = true;
+      occ++; pos = lt.indexOf(lower, pos + kw.length);
+    }
+  }
+  renderResults(results, total, capped, kw);
+}
+
+function renderResults(results, total, capped, kw) {
+  const box = $('#searchResults');
+  if (!total) { box.innerHTML = `<div id="searchMeta">找不到「${esc(kw)}」。</div>`; return; }
+  let html = `<div id="searchMeta">找到 ${total} 處${capped ? `，僅顯示前 ${SEARCH_CAP} 筆（關鍵字再精確些）` : ''}</div>`;
+  results.forEach((r, i) => {
+    html += `<div class="sr-item" data-i="${i}"><div class="sr-src"><span class="sr-badge">${esc(r.badge)}</span>${esc(r.title)}</div><div class="sr-snip">${r.snippet}</div></div>`;
+  });
+  box.innerHTML = html;
+  box.querySelectorAll('.sr-item').forEach((el) => { const r = results[+el.dataset.i]; el.onclick = () => jumpToResult(r, kw); });
+}
+
+function jumpToResult(r, kw) {
+  closeSearch();
+  openItem(r.type, r.idx, true);
+  // 等 openItem 完成渲染（翻頁模式還要量測）後，再上高亮並定位
+  requestAnimationFrame(() => requestAnimationFrame(() => highlightInReader(kw, r.occ)));
+}
+
+// ── 章內高亮與命中導航 ──
+function clearHighlights() {
+  const body = $('#chBody');
+  body.querySelectorAll('mark.sh').forEach((m) => m.replaceWith(document.createTextNode(m.textContent)));
+  body.normalize();
+  searchHits = []; searchHitIdx = -1;
+  $('#searchNav').classList.remove('active');
+}
+function highlightInReader(kw, occ) {
+  clearHighlights();
+  const body = $('#chBody');
+  const lower = kw.toLowerCase();
+  const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach((node) => {
+    const text = node.nodeValue, lt = text.toLowerCase();
+    if (!lt.includes(lower)) return;
+    const frag = document.createDocumentFragment();
+    let i = 0, pos;
+    while ((pos = lt.indexOf(lower, i)) !== -1) {
+      if (pos > i) frag.appendChild(document.createTextNode(text.slice(i, pos)));
+      const mk = document.createElement('mark'); mk.className = 'sh'; mk.textContent = text.slice(pos, pos + kw.length);
+      frag.appendChild(mk); i = pos + kw.length;
+    }
+    if (i < text.length) frag.appendChild(document.createTextNode(text.slice(i)));
+    node.replaceWith(frag);
+  });
+  searchHits = [...body.querySelectorAll('mark.sh')];
+  if (!searchHits.length) return;
+  gotoHit(Math.min(occ, searchHits.length - 1));
+}
+function gotoHit(k) {
+  if (!searchHits.length) return;
+  const n = searchHits.length;
+  k = ((k % n) + n) % n;                          // 環狀：頭尾相接
+  if (searchHitIdx >= 0 && searchHits[searchHitIdx]) searchHits[searchHitIdx].classList.remove('cur');
+  searchHitIdx = k;
+  const el = searchHits[k]; el.classList.add('cur');
+  if (isPaged()) { measurePaged(); gotoPage(pageOfElement(el), false); }
+  else { window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 96, behavior: 'smooth' }); }
+  $('#searchNavInfo').textContent = (k + 1) + ' / ' + n;
+  $('#searchNav').classList.add('active');
+}
+
+// ── 事件綁定 ──
+$('#unlockBtn').onclick = () => { const p = $('#passInput').value.trim(); if (p) doUnlock(p, $('#rememberChk').checked); };
+$('#passInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#unlockBtn').click(); });
+$('#backBtn').onclick = () => openDrawer();
+$('#drawerMask').onclick = () => closeDrawer();
+$('#homeBtn').onclick = () => { closeDrawer(); renderLibrary(); show('library'); };   // 頂列「書架」：一鍵回書架
+$('#drawerClose').onclick = () => closeDrawer();                                        // 抽屜「收合」：關閉左拉抽屜
+$('#tocBtn').onclick = () => openToc();
+$('#tocMask').onclick = () => $('#toc').classList.remove('active');
+$('#prevBtn').onclick = () => openItem(curType, curIdx - 1, false);
+$('#nextBtn').onclick = () => openItem(curType, curIdx + 1, false);
+$('#refreshBtn').onclick = () => refreshContent();
+$('#setBtn').onclick = () => { updatePatStatus(); $('#settings').classList.add('active'); };
+$('#closeSetBtn').onclick = () => $('#settings').classList.remove('active');
+$('#setMask').onclick = () => $('#settings').classList.remove('active');
+// 編輯模式
+$('#editBtn').onclick = () => openEditor();
+$('#editCancel').onclick = () => closeEditor();
+$('#editSave').onclick = () => saveEdit();
+// GitHub PAT 存/清
+$('#patSave').onclick = () => { const v = $('#patInput').value.trim(); if (v) { localStorage.setItem(LS.ghpat, v); $('#patInput').value = ''; } updatePatStatus(); };
+$('#patClear').onclick = () => { localStorage.removeItem(LS.ghpat); updatePatStatus(); };
+$('#segSize').onclick = (e) => { if (e.target.dataset.size) { localStorage.setItem(LS.size, e.target.dataset.size); applyPrefs(); repaginate(); } };
+$('#segFont').onclick = (e) => { if (e.target.dataset.font) { localStorage.setItem(LS.font, e.target.dataset.font); applyPrefs(); repaginate(); } };
+$('#segTheme').onclick = (e) => { if (e.target.dataset.theme) { localStorage.setItem(LS.theme, e.target.dataset.theme); applyPrefs(); repaginate(); } };
+$('#segMode').onclick = (e) => {
+  if (!e.target.dataset.mode) return;
+  const wasReading = $('#reader').classList.contains('active');
+  localStorage.setItem(LS.mode, e.target.dataset.mode);
+  applyPrefs();
+  if (wasReading) openItem(curType, curIdx, true);   // 以新模式重開，沿用進度
+};
+$('#segAnim').onclick = (e) => { if (e.target.dataset.anim) { localStorage.setItem(LS.anim, e.target.dataset.anim); applyPrefs(); } };
+// 翻頁模式：點畫面右半＝下一頁、左半＝上一頁
+$('#readerContent').addEventListener('click', (e) => {
+  if (!isPaged()) return;
+  if (e.clientX >= window.innerWidth / 2) nextPage(); else prevPage();
+});
+// 鍵盤方向鍵／空白鍵翻頁；音量鍵嘗試監聽（多數瀏覽器/PWA 不會送達硬體音量鍵）
+document.addEventListener('keydown', (e) => {
+  if (!$('#reader').classList.contains('active') || !isPaged()) return;
+  if (['ArrowRight', 'ArrowDown', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); nextPage(); }
+  else if (['ArrowLeft', 'ArrowUp', 'PageUp'].includes(e.key)) { e.preventDefault(); prevPage(); }
+  else if (e.key === 'AudioVolumeDown') nextPage();
+  else if (e.key === 'AudioVolumeUp') prevPage();
+});
+let rzT;
+window.addEventListener('resize', () => { clearTimeout(rzT); rzT = setTimeout(repaginate, 200); });
+$('#forgetBtn').onclick = () => {
+  localStorage.removeItem(LS.pass); KEY = null;
+  $('#settings').classList.remove('active'); $('#passInput').value = '';
+  show('gate'); $('#passInput').focus();
+};
+
+// ── 搜尋事件 ──
+$('#searchBtn').onclick = () => openSearch();
+$('#searchCancel').onclick = () => closeSearch();
+$('#searchInput').addEventListener('input', debounce(doSearch, 180));
+$('#searchInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doSearch(); } });
+$('#searchFilter').onclick = (e) => {
+  const f = e.target.dataset.filter; if (!f || e.target.disabled) return;
+  SFILTER = f;
+  $('#searchFilter').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.filter === f));
+  doSearch();
+};
+$('#hitPrev').onclick = () => gotoHit(searchHitIdx - 1);
+$('#hitNext').onclick = () => gotoHit(searchHitIdx + 1);
+$('#hitClose').onclick = () => clearHighlights();
+
+// ── 啟動 ──
+(async function init() {
+  applyPrefs();
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  try {
+    INDEX = await loadIndex();
+  } catch (e) {
+    $('#gate').classList.add('active');
+    $('#gateErr').textContent = '尚未取得書稿資料，請確認網路後重開。';
+    return;
+  }
+  const saved = localStorage.getItem(LS.pass);
+  if (saved) {
+    try {
+      await unlock(saved);
+      renderLibrary();
+      show('library');
+      return;
+    } catch (e) { localStorage.removeItem(LS.pass); }
+  }
+  show('gate');
+  $('#passInput').focus();
+})();
+</script>
+</body>
+</html>
