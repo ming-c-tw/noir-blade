@@ -9,9 +9,14 @@
 // 流程：git pull → 解密 data/*.json → 依章號/檔名比對本地，只把「有變動」的正文寫回。
 // 只覆蓋真的變了的檔（body 與本地目前萃取結果不同才寫），沒變的一律不動 → 冪等、安全。
 //
+// ⚠️⚠️ 預設只還原「正文」（章節＋_備選版本）—— 2026-08-21 Ming 定。
+//    手機 App 永遠只會動正文，而線上的 settings／brain／assets 三包停在「上次 build --push --full」
+//    的狀態；無條件寫回等於拿舊版蓋掉電腦上剛改的設定集與小說大腦。要換機取整包 → 明講 --full。
+//
 // 用法：
-//   node pull.mjs          先 git pull，再把變動寫回 .md
-//   node pull.mjs --dry    只比對、印出會改哪些，不 git pull、不寫檔（純唯讀，用來驗證）
+//   node pull.mjs          先 git pull，再把變動寫回 .md（⭐只碰正文：章節＋備選版本）
+//   node pull.mjs --full   連換機同步包一起還原（設定集 5 份 md ＋ 小說大腦/ 整包 ＋ CLAUDE.md ＋ 地圖素材）
+//   node pull.mjs --dry    只比對、印出會改哪些，不 git pull、不寫檔（純唯讀；可與 --full 併用）
 //
 // 密碼取自同層 .passphrase（與 build.mjs 相同）。
 
@@ -33,6 +38,16 @@ const DRY = process.argv.includes('--dry');
 // 用在「git pull 已經成功、但寫回階段中途失敗」的情形（HEAD 已前進 → 正常模式會判定沒東西要拉）。
 // ⚠️ 用它之前要確認線上比本地新，否則會被線上舊版蓋掉（舊檔仍會進 舊檔備份/pull快照_*）。
 const FORCE = process.argv.includes('--force-all');
+// --full：連「換機同步包」一起還原（設定集 md／小說大腦＋CLAUDE.md／設定集素材）。
+// ⛔ 預設不還原它們（2026-08-21 Ming 定）：手機只動正文，那三包在線上是舊的，
+//    寫回就會蓋掉電腦上剛改的設定與大腦。只有「換到另一台、要整包進度」時才加這個旗標。
+const FULL = process.argv.includes('--full');
+// --yes：確認要讓線上那三包覆蓋本地的設定集與小說大腦。
+// ⚠️ 為什麼要多一道：線上那三包停在「上次 build --push --full」那一刻，可能比本機舊好幾天
+//    （2026-08-21 實測：那時 --full 會想拿舊版蓋掉當天剛改的 連續性總帳.md 與 CLAUDE.md）。
+//    內容比對分不出「誰比較新」，mtime 又會被上一次 pull 自己弄髒 → 不自動猜，改成列清單＋要一句確認。
+const YES = process.argv.includes('--yes');
+const FULL_PREVIEW = FULL && !YES;   // --full 沒帶 --yes → 只列出會覆蓋哪些，不寫檔
 
 // ── 讀密碼 ──────────────────────────────────────────────
 function readPass() {
@@ -285,7 +300,7 @@ for (const v of idx.volumes) {
 }
 
 // 設定文件
-if (idx.settings && idx.settings.file && eligible(idx.settings.file)) {
+if (FULL && idx.settings && idx.settings.file && eligible(idx.settings.file)) {
   const docs = (JSON.parse(decrypt(key, JSON.parse(readFileSync(join(DATA, idx.settings.file), 'utf8')))).docs) || [];
   for (const doc of docs) {
     checked++;
@@ -296,8 +311,7 @@ if (idx.settings && idx.settings.file && eligible(idx.settings.file)) {
     const oldBody = extractSettingBody(raw);
     const heading = headingOf(raw) || `# ${doc.title}`;
     const out = heading + '\n\n' + doc.body + '\n';
-    snapshotOld(path);
-    if (!DRY) writeFileSync(path, out, 'utf8');
+    if (!DRY && !FULL_PREVIEW) { snapshotOld(path); writeFileSync(path, out, 'utf8'); }
     diffs.push({ kind: 'setting', label: `設定《${doc.title}》`, sub: '設定集', file: doc.id + '.md', oldBody, newBody: doc.body });
     changed++; report.push(`  ✎ 設定 ${doc.id}.md`);
   }
@@ -345,8 +359,10 @@ function pullBundle(entry, kind, kindLabel) {
     if (exists && readFileSync(abs).equals(next)) continue;                    // 位元組完全一致 → 不動
     const oldBody = exists && isText ? readFileSync(abs, 'utf8') : undefined;  // 先讀舊版（供 diff），再覆蓋
     const oldSize = exists ? statSync(abs).size : 0;
-    if (exists) snapshotOld(abs, f.path);
-    if (!DRY) { mkdirSync(dirname(abs), { recursive: true }); writeFileSync(abs, next); }
+    if (!DRY && !FULL_PREVIEW) {
+      if (exists) snapshotOld(abs, f.path);
+      mkdirSync(dirname(abs), { recursive: true }); writeFileSync(abs, next);
+    }
     diffs.push({
       kind, label: `${kindLabel}${f.path}`, sub: dirname(f.path), file: basename(f.path),
       oldBody, newBody: isText ? next.toString('utf8') : undefined,
@@ -357,8 +373,36 @@ function pullBundle(entry, kind, kindLabel) {
   return seen;
 }
 
-const brainSeen = pullBundle(idx.brain, 'brain', '大腦 ');
-pullBundle(idx.assets, 'asset', '素材 ');
+if (FULL) {
+  // brain.json 只在 build --push --full 時才重新打包 → 它的最後 commit 時間就是那三包的實際新舊。
+  let packed = '（查不到）';
+  try {
+    packed = execSync('git log -1 --format=%cI -- data/brain.json', { cwd: __dirname, stdio: 'pipe' })
+      .toString().trim().replace('T', ' ').slice(0, 19) || packed;
+  } catch {}
+  console.log(`· --full：線上那三包（設定集／小說大腦／素材）打包於 ${packed}`);
+  if (FULL_PREVIEW) console.log('  ⚠️ 預覽模式：只列出會被覆蓋的檔，不寫任何東西。確認那個時間比本機的改動新，再加 --yes。');
+}
+
+const brainSeen = FULL ? pullBundle(idx.brain, 'brain', '大腦 ') : null;
+if (FULL) pullBundle(idx.assets, 'asset', '素材 ');
+
+// 預設模式下，若這次 git pull 其實帶進了那三包（＝另一台跑過 build --push --full），
+// 一定要講出來 —— 否則換機時會以為「pull 過了就是最新」，其實設定與大腦根本沒拿到。
+if (!FULL) {
+  // ⚠️ --dry 沒有 changedData（eligible 恆真），問不出「線上到底有沒有更新」→ 該模式下不做這個判斷。
+  const bundles = DRY ? [] : [
+    [idx.settings, '設定集 5 份 md'],
+    [idx.brain, '小說大腦／CLAUDE.md'],
+    [idx.assets, '設定集地圖素材'],
+  ].filter(([e]) => e && e.file && eligible(e.file));
+  if (bundles.length) {
+    report.push(`  ℹ 線上這三包也有更新，但預設不還原（怕蓋掉本機剛改的）：${bundles.map(([, l]) => l).join('、')}`);
+    report.push('      要拿 → 先確認本機沒有更新的版本，再跑 node pull.mjs --full');
+  } else {
+    report.push('  · 只還原正文（章節＋備選版本）；設定集／小說大腦／素材未比對、原地不動。要換機取整包 → --full');
+  }
+}
 
 // 本地有、線上那包沒有 → 另一台刪掉／歸檔了，或這台剛新增還沒推。
 // ⚠️ 一律不刪、只提示（與本腳本「永不刪除」的原則一致）。
@@ -372,7 +416,11 @@ if (brainSeen) {
   }
 }
 
-console.log(`\n對照 ${checked} 項${DRY ? '（--dry：只比對、未寫檔）' : ''}，需寫回 ${changed} 項。`);
+console.log(`\n對照 ${checked} 項${DRY ? '（--dry：只比對、未寫檔）' : FULL_PREVIEW ? '（--full 預覽：只列清單、未寫檔）' : ''}，需寫回 ${changed} 項。`);
+if (FULL_PREVIEW && changed) {
+  console.log('⚠️ 上面這些會被線上那包覆蓋。確定要 → node pull.mjs --full --yes');
+  console.log('   若本機那些檔比較新 → 先在本機跑 node build.mjs --push --full，把本機版本推上去，再到另一台 pull。');
+}
 console.log(report.length ? report.join('\n') : '  ✓ 本地已是最新，無需更新。');
 
 // ── pull 後：對被覆蓋的每一項做 舊版 vs 新版 diff，產出繁中比對報告 ────────
