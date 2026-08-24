@@ -171,7 +171,9 @@ function scanSettings() {
 // 目的（2026-08-18 加）：SSD 不在身邊時，另一台電腦只要 node pull.mjs 就拿得到整包最新進度。
 // 原本 pull 只還原「App 讀得到的東西」（章節／備選／5 份設定 md），大腦與地圖完全沒過去 → 換機就缺進度。
 // ⚠️ repo 是 public，所以照章節同一把密碼加密後才推。App 端不讀 index.brain／index.assets → 不下載、不顯示。
-const TEXT_EXT = new Set(['.md', '.txt', '.py', '.svg', '.json', '.csv', '.html']);
+// ⭐2026-08-24 加 .mjs／.js：小說大腦/_brain/ 的 brain CLI 也要跟著換機同步包走
+// （另一台電腦沒有它就不能跑 ctx／check）。存 utf8 才做得出行級 diff——存 base64 只會報大小變化。
+const TEXT_EXT = new Set(['.md', '.txt', '.py', '.svg', '.json', '.csv', '.html', '.mjs', '.js']);
 
 function walk(dir, out = []) {
   for (const d of readdirSync(dir, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
